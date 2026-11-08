@@ -1,0 +1,38 @@
+<resources>
+    <string name="app_name">CellCount Lab</string>
+    <string name="app_subtitle">دستیار هوشمند کشت سلول، رقت مدیا، سرم و میکس سلولی</string>
+
+    <!-- Navigation Tabs -->
+    <string name="tab_dilution">رقت و سرم</string>
+    <string name="tab_mixer">میکس سلولی</string>
+    <string name="tab_hemocytometer">شمارش نئوبار</string>
+    <string name="tab_seeding">پلیت و تاریخچه</string>
+
+    <!-- Dilution & Serum Screen -->
+    <string name="dilution_header_title">محاسبه‌گر دوطرفه کانت، مدیا و سرم</string>
+    <string name="dilution_header_desc">هر پارامتری را تغییر دهید؛ سایر مقادیر (کانت تارگت، حجم نهایی، مدیا و سرم) به صورت خودکار و آنی محاسبه می‌شوند.</string>
+    <string name="label_current_volume">حجم سلول فعلی (V₁)</string>
+    <string name="label_current_count">کانت فعلی سلول (C₁)</string>
+    <string name="label_target_count">کانت تارگت (C₂)</string>
+    <string name="label_final_volume">حجم نهایی کل (V₂)</string>
+    <string name="label_serum_percent">درصد سرم مورد نظر (FBS %)</string>
+    <string name="label_media_volume">حجم مدیا پایه برای افزودن</string>
+    <string name="label_serum_volume">حجم سرم (FBS) برای افزودن</string>
+    <string name="label_total_added_volume">مجموع حجم اضافه‌شده (مدیا + سرم)</string>
+
+    <!-- Mixer Screen -->
+    <string name="mixer_header_title">میکس چند سوسپانسیون سلولی</string>
+    <string name="mixer_header_desc">حجم و کانت فلاسک‌ها یا فالکون‌های مختلف را وارد کنید تا کانت نهایی میکس، حجم کل و تعداد کل سلول‌ها محاسبه شود.</string>
+    <string name="btn_add_cell_sample">افزودن نمونه سلولی جدید</string>
+    <string name="btn_send_mix_to_dilution">انتقال این میکس به بخش محاسبه مدیا و سرم</string>
+
+    <!-- Neubauer Screen -->
+    <string name="neubauer_header_title">شمارشگر لام نئوبار و درصد زنده‌مانی</string>
+    <string name="neubauer_header_desc">تعداد سلول‌های زنده و مرده در خانه‌های لام نئوبار و ضریب رقت تریپان بلو را وارد کنید.</string>
+    <string name="btn_send_neubauer_to_dilution">ارسال کانت به محاسبه‌گر مدیا و سرم</string>
+    <string name="btn_send_neubauer_to_mixer">افزودن به لیست میکس سلولی</string>
+
+    <!-- Seeding & History Screen -->
+    <string name="seeding_header_title">محاسبه‌گر پلیت‌ریزی و فلاسک + تاریخچه</string>
+    <string name="seeding_header_desc">محاسبه دقیق حجم سوسپانسیون، مدیا و سرم برای کشت در پلیت‌های ۶ تا ۹۶ خانه و فلاسک‌ها به همراه خطای پیپتینگ.</string>
+</resources>

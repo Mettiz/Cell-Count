@@ -1,0 +1,6 @@
+{
+  "name": "CellCount Lab",
+  "description": "محاسبه‌گر هوشمند کانت سلولی، رقت مدیا و درصد سرم، میکس چند نمونه سلولی و شمارشگر نئوبار",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
