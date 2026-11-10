@@ -14,54 +14,54 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 
 private val DarkColorScheme = darkColorScheme(
-    primary = BioTealLight,
-    onPrimary = LabDeepTeal,
-    primaryContainer = Color(0xFF005254),
-    onPrimaryContainer = Color(0xFFB3F3EE),
+    primary = BioIndigoLight,
+    onPrimary = Color(0xFF1E1B4B),
+    primaryContainer = Color(0xFF312E81),
+    onPrimaryContainer = Color(0xFFE0E7FF),
     secondary = SerumAmberLight,
     onSecondary = Color(0xFF3E2400),
     secondaryContainer = Color(0xFF5A3600),
-    onSecondaryContainer = Color(0xFFFFDEA8),
+    onSecondaryContainer = Color(0xFFFEF3C7),
     tertiary = MediaCoralLight,
-    onTertiary = Color(0xFF4C0014),
-    tertiaryContainer = Color(0xFF72142B),
-    onTertiaryContainer = Color(0xFFFFD9DF),
-    background = LabDeepTeal,
-    onBackground = Color(0xFFE4F2F2),
+    onTertiary = Color(0xFF4C0519),
+    tertiaryContainer = Color(0xFF881337),
+    onTertiaryContainer = Color(0xFFFFE4E6),
+    background = LabDeepIndigo,
+    onBackground = Color(0xFFF1F5F9),
     surface = LabDarkSurface,
-    onSurface = Color(0xFFE4F2F2),
+    onSurface = Color(0xFFF1F5F9),
     surfaceVariant = LabDarkCard,
-    onSurfaceVariant = Color(0xFFB4D2D4),
-    outline = Color(0xFF477276)
+    onSurfaceVariant = Color(0xFFCBD5E1),
+    outline = Color(0xFF475569)
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = BioTealPrimary,
+    primary = BioIndigoPrimary,
     onPrimary = Color.White,
-    primaryContainer = BioTealContainer,
-    onPrimaryContainer = OnBioTealContainer,
+    primaryContainer = BioIndigoContainer,
+    onPrimaryContainer = OnBioIndigoContainer,
     secondary = SerumAmber,
     onSecondary = Color.White,
     secondaryContainer = SerumAmberSoft,
-    onSecondaryContainer = Color(0xFF452200),
+    onSecondaryContainer = Color(0xFF451A03),
     tertiary = MediaCoral,
     onTertiary = Color.White,
     tertiaryContainer = MediaCoralSoft,
-    onTertiaryContainer = Color(0xFF420010),
+    onTertiaryContainer = Color(0xFF4C0519),
     background = LightLabBackground,
     onBackground = LightLabOnSurface,
     surface = LightLabSurface,
     onSurface = LightLabOnSurface,
     surfaceVariant = LightLabSurfaceVariant,
     onSurfaceVariant = LightLabOnSurfaceVariant,
-    outline = Color(0xFF8AA8AC)
+    outline = Color(0xFF94A3B8)
 )
 
 val LabShapes = Shapes(
     small = RoundedCornerShape(10.dp),
     medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(22.dp),
-    extraLarge = RoundedCornerShape(28.dp)
+    large = RoundedCornerShape(20.dp),
+    extraLarge = RoundedCornerShape(26.dp)
 )
 
 @Composable

@@ -3,6 +3,7 @@ package com.example.ui.screens
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,16 +22,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.MergeType
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.MergeType
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -41,21 +41,26 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.example.model.CellSampleItem
 import com.example.model.CountUnitMultiplier
 import com.example.model.MixerState
 import com.example.model.NumberFormatter
-import com.example.ui.components.LabHeroBanner
+import com.example.model.VolumeUnit
 import com.example.ui.components.LabNumericField
-import com.example.ui.theme.BioTealPrimary
+import com.example.ui.components.QuickUnitSwitchBar
+import com.example.ui.components.adaptiveMonospaceFontSize
+import com.example.ui.theme.BioIndigoPrimary
 import com.example.ui.theme.CellCyan
 import com.example.ui.theme.MediaCoral
 import com.example.ui.theme.RobotoMonoFontFamily
@@ -68,10 +73,14 @@ fun CellMixerScreen(
     onAddSample: () -> Unit,
     onRemoveSample: (Int) -> Unit,
     onSampleVolumeChanged: (Int, String) -> Unit,
+    onToggleSampleVolumeUnit: (Int) -> Unit,
+    onToggleSampleCountUnit: (Int) -> Unit,
+    onSetAllMixerVolumeUnits: (VolumeUnit) -> Unit,
+    onSetAllMixerCountUnits: (CountUnitMultiplier) -> Unit,
     onSampleCountChanged: (Int, String) -> Unit,
     onSampleLabelChanged: (Int, String) -> Unit,
     onExtraMediaChanged: (String) -> Unit,
-    onUnitMultiplierSelected: (CountUnitMultiplier) -> Unit,
+    onToggleExtraMediaUnit: () -> Unit,
     onTransferMixToDilution: () -> Unit,
     onSaveMixToHistory: () -> Unit,
     modifier: Modifier = Modifier
@@ -81,35 +90,45 @@ fun CellMixerScreen(
 
     val sampleColors = listOf(
         CellCyan,
-        BioTealPrimary,
+        BioIndigoPrimary,
         SerumAmber,
         MediaCoral,
         ViableGreen
     )
 
+    val activeGlobalVolUnit = if (
+        state.samples.all { it.volumeUnit == state.outputVolumeUnit } &&
+        state.extraMediaUnit == state.outputVolumeUnit
+    ) state.outputVolumeUnit else null
+
+    val activeGlobalCountUnit = if (
+        state.samples.all { it.countUnit == state.unitMultiplier }
+    ) state.unitMultiplier else null
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        LabHeroBanner(
-            title = "میکس چند سوسپانسیون سلولی با حجم و کانت مختلف",
-            subtitle = "هر تعداد فالکون یا فلاسک با کانت و حجم متفاوت را اضافه کنید تا کانت نهایی میکس، حجم کل و تعداد کل سلول‌ها به صورت آنی محاسبه شود.",
-            badgeText = "فرمول میکس: C_mix = Σ(Cᵢ × Vᵢ) / ΣVᵢ"
+        // 1. GLOBAL UNIT CONVERSION BAR FOR MIXER (mL ⇄ L | میلیون ⇄ عدد کامل)
+        QuickUnitSwitchBar(
+            activeVolumeUnit = activeGlobalVolUnit,
+            onSelectVolumeUnit = onSetAllMixerVolumeUnits,
+            activeCountUnit = activeGlobalCountUnit,
+            onSelectCountUnit = onSetAllMixerCountUnits
         )
 
-        // LIVE MIX RESULT SUMMARY CARD
+        // 2. LIVE MIX RESULT SUMMARY CARD
         Card(
-            shape = RoundedCornerShape(22.dp),
+            shape = RoundedCornerShape(18.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
             ),
-            border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
-            elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
         ) {
-            Column(modifier = Modifier.padding(18.dp)) {
+            Column(modifier = Modifier.padding(14.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -117,77 +136,89 @@ fun CellMixerScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Default.MergeType,
+                            imageVector = Icons.AutoMirrored.Filled.MergeType,
                             contentDescription = "نتیجه میکس سلولی",
                             tint = MaterialTheme.colorScheme.primary
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "نتیجه نهایی میکس (${state.samples.size} نمونه)",
-                            style = MaterialTheme.typography.titleMedium,
+                            text = "نتیجه میکس (${state.samples.size} نمونه)",
+                            style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold
                         )
                     }
                     Surface(
                         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onSetAllMixerCountUnits(state.unitMultiplier.toggle()) }
                     ) {
                         Text(
-                            text = state.unitMultiplier.shortLabel,
-                            style = MaterialTheme.typography.labelMedium,
+                            text = "${state.unitMultiplier.shortLabel} ⇄",
+                            style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                // Main 3 Metrics Row
+                // Row 1: Full-width Final Mixed Concentration so long numbers are 100% readable
+                MixMetricBox(
+                    title = "کانت نهایی میکس",
+                    numberText = NumberFormatter.formatCountForUnitWithCommas(state.mixedCountRawPerMl, state.unitMultiplier),
+                    unitText = state.unitMultiplier.shortLabel,
+                    subText = NumberFormatter.formatOppositeCountHelper(state.mixedCountRawPerMl, state.unitMultiplier),
+                    accentColor = BioIndigoPrimary,
+                    onClick = { onSetAllMixerCountUnits(state.unitMultiplier.toggle()) },
+                    testTag = "mix_result_count",
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Row 2: Total Mix Volume & Total Cells in spacious 2-column grid
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     MixMetricBox(
-                        title = "کانت نهایی میکس",
-                        mainValue = NumberFormatter.formatClean(state.mixedCountVal, 4),
-                        subValue = state.unitMultiplier.shortLabel,
-                        accentColor = BioTealPrimary,
-                        testTag = "mix_result_count",
-                        modifier = Modifier.weight(1.2f)
-                    )
-                    MixMetricBox(
                         title = "حجم کل میکس",
-                        mainValue = "${NumberFormatter.formatClean(state.totalFinalMixVolumeMl, 3)} mL",
-                        subValue = "${NumberFormatter.formatClean(state.totalFinalMixVolumeMl * 1000.0, 1)} µL",
+                        numberText = NumberFormatter.formatWithCommas(state.outputVolumeUnit.fromMl(state.totalFinalMixVolumeMl), 4),
+                        unitText = state.outputVolumeUnit.symbol,
+                        subText = NumberFormatter.formatOppositeUnitHelper(state.totalFinalMixVolumeMl, state.outputVolumeUnit),
                         accentColor = CellCyan,
+                        onClick = { onSetAllMixerVolumeUnits(state.outputVolumeUnit.toggle()) },
                         testTag = "mix_result_volume",
                         modifier = Modifier.weight(1f)
                     )
                     MixMetricBox(
-                        title = "کل سلول‌های میکس",
-                        mainValue = NumberFormatter.formatClean(state.totalCellsScaled, 3),
-                        subValue = NumberFormatter.formatScientificCount(state.totalAbsoluteCells),
+                        title = "کل سلول‌ها",
+                        numberText = NumberFormatter.formatCountForUnitWithCommas(state.totalAbsoluteCells, state.unitMultiplier),
+                        unitText = state.unitMultiplier.shortLabel,
+                        subText = NumberFormatter.formatOppositeCountHelper(state.totalAbsoluteCells, state.unitMultiplier),
                         accentColor = SerumAmber,
+                        onClick = { onSetAllMixerCountUnits(state.unitMultiplier.toggle()) },
                         testTag = "mix_result_total_cells",
                         modifier = Modifier.weight(1f)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
-                // Action Buttons: Send Mix to Dilution & Serum Calculator or Save
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Button(
                         onClick = {
                             onTransferMixToDilution()
                             Toast.makeText(
                                 context,
-                                "حجم و کانت میکس به بخش رقت و محاسبه سرم منتقل شد",
+                                "حجم و کانت میکس به بخش رقت و سرم منتقل شد",
                                 Toast.LENGTH_SHORT
                             ).show()
                         },
@@ -199,15 +230,15 @@ fun CellMixerScreen(
                             .testTag("btn_transfer_mix_to_dilution")
                     ) {
                         Text(
-                            text = "محاسبه مدیا و سرم برای این میکس",
-                            style = MaterialTheme.typography.labelLarge,
+                            text = "محاسبه مدیا و سرم برای میکس",
+                            style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = "انتقال به محاسبه سرم",
-                            modifier = Modifier.size(18.dp)
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
                         )
                     }
 
@@ -217,13 +248,13 @@ fun CellMixerScreen(
                             Toast.makeText(context, "نتیجه میکس ذخیره شد", Toast.LENGTH_SHORT).show()
                         },
                         modifier = Modifier
-                            .weight(0.85f)
+                            .weight(0.8f)
                             .testTag("btn_save_mix")
                     ) {
                         Icon(
                             imageVector = Icons.Default.BookmarkAdd,
-                            contentDescription = "ذخیره میکس",
-                            modifier = Modifier.size(18.dp)
+                            contentDescription = "ذخیره",
+                            modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("ذخیره")
@@ -232,40 +263,11 @@ fun CellMixerScreen(
             }
         }
 
-        // Unit Multiplier Selector for Mixer
-        Card(
-            shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        ) {
-            Column(modifier = Modifier.padding(14.dp)) {
-                Text(
-                    text = "واحد کانت نمونه‌های ورودی",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    CountUnitMultiplier.entries.forEach { mult ->
-                        FilterChip(
-                            selected = state.unitMultiplier == mult,
-                            onClick = { onUnitMultiplierSelected(mult) },
-                            label = { Text(mult.label) }
-                        )
-                    }
-                }
-            }
-        }
-
-        // DYNAMIC LIST OF CELL SAMPLES
+        // 3. DYNAMIC LIST OF CELL SAMPLES
         state.samples.forEachIndexed { idx, sample ->
             val accent = sampleColors[idx % sampleColors.size]
-            val cellSharePercent = if (state.totalCellsScaled > 0.0) {
-                (sample.totalCellsScaled / state.totalCellsScaled) * 100.0
+            val cellSharePercent = if (state.totalAbsoluteCells > 0.0) {
+                (sample.totalRawCells / state.totalAbsoluteCells) * 100.0
             } else 0.0
             val volumeSharePercent = if (state.totalFinalMixVolumeMl > 0.0) {
                 (sample.volumeMl / state.totalFinalMixVolumeMl) * 100.0
@@ -274,33 +276,33 @@ fun CellMixerScreen(
             SampleMixerCard(
                 index = idx + 1,
                 sample = sample,
-                unitLabel = state.unitMultiplier.shortLabel,
                 accentColor = accent,
                 cellSharePercent = cellSharePercent,
                 volumeSharePercent = volumeSharePercent,
                 canDelete = state.samples.size > 2,
                 onVolumeChanged = { onSampleVolumeChanged(sample.id, it) },
+                onToggleVolumeUnit = { onToggleSampleVolumeUnit(sample.id) },
                 onCountChanged = { onSampleCountChanged(sample.id, it) },
+                onToggleCountUnit = { onToggleSampleCountUnit(sample.id) },
                 onLabelChanged = { onSampleLabelChanged(sample.id, it) },
                 onDelete = { onRemoveSample(sample.id) }
             )
         }
 
-        // ADD NEW CELL SAMPLE BUTTON
         OutlinedButton(
             onClick = onAddSample,
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(14.dp),
             border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(52.dp)
+                .height(48.dp)
                 .testTag("btn_add_mixer_sample")
         ) {
             Icon(
                 imageVector = Icons.Default.Add,
                 contentDescription = "افزودن نمونه جدید"
             )
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(6.dp))
             Text(
                 text = "افزودن نمونه سلولی دیگر به میکس (+)",
                 style = MaterialTheme.typography.titleSmall,
@@ -308,67 +310,122 @@ fun CellMixerScreen(
             )
         }
 
-        // OPTIONAL EXTRA BLANK MEDIA IN MIX
         Card(
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(14.dp)) {
                 LabNumericField(
                     value = state.extraMediaVolumeText,
                     onValueChange = onExtraMediaChanged,
-                    label = "حجم محیط کشت / بافر بدون سلول اضافه‌شده حین میکس (اختیاری)",
-                    unitText = "mL",
+                    label = "حجم مدیا / بافر خالی اضافه‌شده حین میکس (اختیاری)",
+                    unitText = state.extraMediaUnit.symbol,
+                    onUnitClick = onToggleExtraMediaUnit,
                     accentColor = MediaCoral,
-                    helperText = "اگر هنگام شستشوی فالکون‌ها مدیای خالی هم به میکس اضافه کرده‌اید، حجم آن را وارد کنید تا در حجم نهایی میکس لحاظ شود.",
+                    helperText = NumberFormatter.formatOppositeUnitHelper(state.extraMediaMl, state.extraMediaUnit),
                     testTag = "input_mixer_extra_media"
                 )
             }
         }
-
-        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
 @Composable
 private fun MixMetricBox(
     title: String,
-    mainValue: String,
-    subValue: String,
+    numberText: String,
+    unitText: String,
+    subText: String,
     accentColor: Color,
+    onClick: () -> Unit,
     testTag: String,
     modifier: Modifier = Modifier
 ) {
+    val numFontSize = adaptiveMonospaceFontSize(numberText, baseSp = 15.5f, minSp = 11f)
+
     Surface(
-        modifier = modifier.testTag(testTag),
-        shape = RoundedCornerShape(16.dp),
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .clickable { onClick() }
+            .testTag(testTag),
+        shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, accentColor.copy(alpha = 0.4f))
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 9.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = mainValue,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontFamily = RobotoMonoFontFamily,
-                    fontWeight = FontWeight.Bold
-                ),
-                color = accentColor
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = subValue,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            // Header row: Title on Right + Unit Badge on Left
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = accentColor.copy(alpha = 0.14f)
+                ) {
+                    Text(
+                        text = "$unitText ⇄",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = accentColor,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+
+            // Full-width row dedicated to the Number so it never goes under the unit
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.Start,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = numberText,
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontFamily = RobotoMonoFontFamily,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = numFontSize
+                        ),
+                        color = accentColor,
+                        maxLines = 1
+                    )
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.Start,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "= $subText",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = RobotoMonoFontFamily
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
+            }
         }
     }
 }
@@ -377,23 +434,24 @@ private fun MixMetricBox(
 private fun SampleMixerCard(
     index: Int,
     sample: CellSampleItem,
-    unitLabel: String,
     accentColor: Color,
     cellSharePercent: Double,
     volumeSharePercent: Double,
     canDelete: Boolean,
     onVolumeChanged: (String) -> Unit,
+    onToggleVolumeUnit: () -> Unit,
     onCountChanged: (String) -> Unit,
+    onToggleCountUnit: () -> Unit,
     onLabelChanged: (String) -> Unit,
     onDelete: () -> Unit
 ) {
     Card(
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, accentColor.copy(alpha = 0.3f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -405,19 +463,19 @@ private fun SampleMixerCard(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(32.dp)
+                            .size(30.dp)
                             .clip(CircleShape)
-                            .background(accentColor.copy(alpha = 0.16f)),
+                            .background(accentColor.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Science,
                             contentDescription = null,
                             tint = accentColor,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     OutlinedTextField(
                         value = sample.label,
                         onValueChange = onLabelChanged,
@@ -431,7 +489,7 @@ private fun SampleMixerCard(
                 }
 
                 if (canDelete) {
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     IconButton(
                         onClick = onDelete,
                         modifier = Modifier.testTag("btn_delete_sample_$index")
@@ -445,19 +503,20 @@ private fun SampleMixerCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 LabNumericField(
                     value = sample.volumeText,
                     onValueChange = onVolumeChanged,
-                    label = "حجم نمونه $index (V_$index)",
-                    unitText = "mL",
+                    label = "حجم نمونه $index",
+                    unitText = sample.volumeUnit.symbol,
+                    onUnitClick = onToggleVolumeUnit,
                     accentColor = accentColor,
-                    helperText = "معادل ${NumberFormatter.formatClean(sample.volumeMl * 1000.0, 1)} µL",
+                    helperText = NumberFormatter.formatOppositeUnitHelper(sample.volumeMl, sample.volumeUnit),
                     testTag = "mixer_sample_volume_$index",
                     modifier = Modifier.weight(1f)
                 )
@@ -465,18 +524,19 @@ private fun SampleMixerCard(
                 LabNumericField(
                     value = sample.countText,
                     onValueChange = onCountChanged,
-                    label = "کانت نمونه $index (C_$index)",
-                    unitText = unitLabel,
+                    label = "کانت نمونه $index",
+                    unitText = sample.countUnit.shortLabel,
+                    onUnitClick = onToggleCountUnit,
                     accentColor = accentColor,
-                    helperText = "سلول این نمونه: ${NumberFormatter.formatClean(sample.totalCellsScaled, 3)}",
+                    helperText = NumberFormatter.formatOppositeCountHelper(sample.countRawPerMl, sample.countUnit),
                     testTag = "mixer_sample_count_$index",
                     modifier = Modifier.weight(1f)
                 )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f))
             Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+            Spacer(modifier = Modifier.height(6.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -484,26 +544,26 @@ private fun SampleMixerCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "سهم سلولی در میکس: ${NumberFormatter.formatClean(cellSharePercent, 1)}٪",
-                    style = MaterialTheme.typography.labelMedium,
+                    text = "سهم سلولی: ${NumberFormatter.formatWithCommas(cellSharePercent, 1)}٪",
+                    style = MaterialTheme.typography.labelSmall,
                     color = accentColor,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "سهم حجمی: ${NumberFormatter.formatClean(volumeSharePercent, 1)}٪",
-                    style = MaterialTheme.typography.labelMedium,
+                    text = "سهم حجمی: ${NumberFormatter.formatWithCommas(volumeSharePercent, 1)}٪",
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             LinearProgressIndicator(
                 progress = { (cellSharePercent / 100.0).toFloat().coerceIn(0f, 1f) },
                 color = accentColor,
-                trackColor = accentColor.copy(alpha = 0.15f),
+                trackColor = accentColor.copy(alpha = 0.14f),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(7.dp)
-                    .clip(RoundedCornerShape(4.dp))
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(3.dp))
             )
         }
     }

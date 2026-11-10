@@ -1,0 +1,11 @@
+{
+  "name": "CellCount Lab",
+  "short_name": "CellCount",
+  "description": "محاسبه‌گر هوشمند کانت سلولی، رقت مدیا، درصد سرم و میکس سلولی",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0B2E33",
+  "theme_color": "#0B2E33",
+  "lang": "fa",
+  "dir": "rtl"
+}

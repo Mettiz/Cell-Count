@@ -2,22 +2,23 @@ package com.example.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -30,27 +31,95 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
-import com.example.R
+import androidx.compose.ui.unit.sp
+import com.example.model.CountUnitMultiplier
 import com.example.model.NumberFormatter
+import com.example.model.VolumeUnit
+import com.example.ui.theme.BioIndigoPrimary
 import com.example.ui.theme.CellCyan
-import com.example.ui.theme.LabDeepTeal
 import com.example.ui.theme.MediaCoral
 import com.example.ui.theme.RobotoMonoFontFamily
 import com.example.ui.theme.SerumAmber
+
+/**
+ * VisualTransformation that formats numbers 3-by-3 with thousands separators (e.g. 2,500,000)
+ * while maintaining exact LTR cursor OffsetMapping for smooth editing and deletion from the right.
+ */
+class ThousandsSeparatorVisualTransformation : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        val raw = text.text
+        if (raw.isEmpty()) {
+            return TransformedText(text, OffsetMapping.Identity)
+        }
+
+        val dotIndex = raw.indexOf('.').let { if (it == -1) raw.length else it }
+        if (dotIndex <= 3) {
+            return TransformedText(text, OffsetMapping.Identity)
+        }
+
+        val out = StringBuilder(raw.length + raw.length / 3)
+        val originalToTransformed = IntArray(raw.length + 1)
+        val transformedToOriginal = ArrayList<Int>(raw.length + raw.length / 3 + 2)
+
+        for (i in raw.indices) {
+            if (i in 1 until dotIndex &&
+                (dotIndex - i) % 3 == 0 &&
+                raw[i].isDigit() &&
+                raw[i - 1].isDigit()
+            ) {
+                out.append(',')
+                transformedToOriginal.add(i)
+            }
+            originalToTransformed[i] = out.length
+            out.append(raw[i])
+            transformedToOriginal.add(i)
+        }
+        originalToTransformed[raw.length] = out.length
+        transformedToOriginal.add(raw.length)
+
+        val transformedString = out.toString()
+        val mapping = object : OffsetMapping {
+            override fun originalToTransformed(offset: Int): Int {
+                val safe = offset.coerceIn(0, raw.length)
+                return originalToTransformed[safe].coerceIn(0, transformedString.length)
+            }
+
+            override fun transformedToOriginal(offset: Int): Int {
+                val safe = offset.coerceIn(0, transformedString.length)
+                return transformedToOriginal[safe].coerceIn(0, raw.length)
+            }
+        }
+
+        return TransformedText(AnnotatedString(transformedString), mapping)
+    }
+}
+
+private val SharedThousandsVisualTransformation = ThousandsSeparatorVisualTransformation()
 
 @Composable
 fun LabHeroBanner(
@@ -61,75 +130,198 @@ fun LabHeroBanner(
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(148.dp)
-        ) {
-            Image(
-                painter = painterResource(id = R.drawable.img_cell_lab_hero_1794162078279),
-                contentDescription = title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.horizontalGradient(
-                            colors = listOf(
-                                LabDeepTeal.copy(alpha = 0.72f),
-                                LabDeepTeal.copy(alpha = 0.93f)
-                            )
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            Color(0xFF312E81),
+                            BioIndigoPrimary
                         )
                     )
-            )
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.SpaceBetween
-            ) {
+                )
+                .padding(horizontal = 18.dp, vertical = 14.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Surface(
                     color = Color.White.copy(alpha = 0.16f),
-                    shape = RoundedCornerShape(50),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        Color.White.copy(alpha = 0.28f)
-                    )
+                    shape = RoundedCornerShape(50)
                 ) {
                     Text(
                         text = badgeText,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color(0xFFA7F3D0),
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFFE0E7FF),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
                     )
                 }
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.85f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
 
-                Column {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.86f),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
+@Composable
+fun QuickUnitSwitchBar(
+    activeVolumeUnit: VolumeUnit?,
+    onSelectVolumeUnit: (VolumeUnit) -> Unit,
+    activeCountUnit: CountUnitMultiplier?,
+    onSelectCountUnit: (CountUnitMultiplier) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Volume Unit Segment (mL / L)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "یکای حجم (تبدیل آنی)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+                        .padding(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    VolumeUnit.entries.forEach { vUnit ->
+                        val selected = activeVolumeUnit == vUnit
+                        Surface(
+                            color = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                            shape = RoundedCornerShape(9.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(9.dp))
+                                .clickable { onSelectVolumeUnit(vUnit) }
+                                .testTag("global_vol_unit_${vUnit.name}")
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.padding(vertical = 7.dp)
+                            ) {
+                                Text(
+                                    text = if (vUnit == VolumeUnit.ML) "میلی‌لیتر (mL)" else "لیتر (L)",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (selected) {
+                                        MaterialTheme.colorScheme.onPrimary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Count Unit Segment (میلیون / عدد کامل)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "یکای کانت (تبدیل آنی)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+                        .padding(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    CountUnitMultiplier.entries.forEach { cUnit ->
+                        val selected = activeCountUnit == cUnit
+                        Surface(
+                            color = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                            shape = RoundedCornerShape(9.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(9.dp))
+                                .clickable { onSelectCountUnit(cUnit) }
+                                .testTag("unit_chip_${cUnit.name}")
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.padding(vertical = 7.dp)
+                            ) {
+                                Text(
+                                    text = cUnit.shortLabel,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (selected) {
+                                        MaterialTheme.colorScheme.onPrimary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 }
 
+/**
+ * Computes an adaptive font size (in sp) based on the formatted text length so long numbers
+ * (e.g., 25,000,000) fit cleanly inside their container without clipping or overlapping.
+ */
+fun adaptiveMonospaceFontSize(
+    text: String,
+    baseSp: Float = 16f,
+    minSp: Float = 11f
+): TextUnit {
+    val len = text.length
+    val computed = when {
+        len <= 6 -> baseSp
+        len <= 8 -> baseSp - 1.2f
+        len <= 10 -> baseSp - 2.4f
+        len <= 12 -> baseSp - 3.5f
+        len <= 15 -> baseSp - 4.5f
+        else -> minSp
+    }
+    return computed.coerceAtLeast(minSp).sp
+}
+
+/**
+ * Numeric input field where:
+ * - The Title is on the top-right and the interactive Unit Pill (with ⇄ toggle) is on the top-left of the header row,
+ *   so the unit NEVER blocks or overlaps the number inside the text field!
+ * - Inside the OutlinedTextField, 100% of the horizontal width is dedicated to the number (LTR with 3-by-3 commas)
+ *   with automatic font-size scaling for long numbers.
+ */
 @Composable
 fun LabNumericField(
     value: String,
@@ -139,107 +331,164 @@ fun LabNumericField(
     accentColor: Color,
     testTag: String,
     modifier: Modifier = Modifier,
+    onUnitClick: (() -> Unit)? = null,
     helperText: String? = null,
     badgeLabel: String? = null,
     onBadgeClick: (() -> Unit)? = null,
     leadingIcon: ImageVector? = null
 ) {
+    val formattedPreview = remember(value) { NumberFormatter.addThousandsSeparator(value) }
+    val dynamicFontSize = adaptiveMonospaceFontSize(formattedPreview, baseSp = 16f, minSp = 11.5f)
+
     Column(modifier = modifier) {
+        // Header Row: Label on Right (in RTL) + Unit Badge Pill on Left (in RTL)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .padding(end = 4.dp)
+            ) {
                 Box(
                     modifier = Modifier
-                        .size(8.dp)
+                        .size(7.dp)
                         .clip(CircleShape)
                         .background(accentColor)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(5.dp))
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurface
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
-            if (badgeLabel != null) {
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                if (badgeLabel != null) {
+                    Surface(
+                        color = accentColor.copy(alpha = 0.13f),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = if (onBadgeClick != null) {
+                            Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable { onBadgeClick() }
+                        } else {
+                            Modifier
+                        }
+                    ) {
+                        Text(
+                            text = badgeLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = accentColor,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                // Dedicated Unit Pill in Header so it never covers digits inside the input box
                 Surface(
-                    color = accentColor.copy(alpha = 0.14f),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = if (onBadgeClick != null) {
-                        Modifier.clickable { onBadgeClick() }
+                    color = accentColor.copy(alpha = if (onUnitClick != null) 0.16f else 0.10f),
+                    shape = RoundedCornerShape(7.dp),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = accentColor.copy(alpha = if (onUnitClick != null) 0.48f else 0.25f)
+                    ),
+                    modifier = if (onUnitClick != null) {
+                        Modifier
+                            .clip(RoundedCornerShape(7.dp))
+                            .clickable { onUnitClick() }
+                            .testTag("${testTag}_unit_toggle")
                     } else {
                         Modifier
                     }
                 ) {
                     Text(
-                        text = badgeLabel,
+                        text = if (onUnitClick != null) "$unitText ⇄" else unitText,
                         style = MaterialTheme.typography.labelSmall,
                         color = accentColor,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(5.dp))
 
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            textStyle = MaterialTheme.typography.titleMedium.copy(
-                fontFamily = RobotoMonoFontFamily,
-                fontWeight = FontWeight.Bold
-            ),
-            leadingIcon = if (leadingIcon != null) {
-                {
-                    Icon(
-                        imageVector = leadingIcon,
-                        contentDescription = label,
-                        tint = accentColor,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            } else null,
-            trailingIcon = {
-                Surface(
-                    color = accentColor.copy(alpha = 0.12f),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.padding(end = 8.dp)
-                ) {
-                    Text(
-                        text = unitText,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = accentColor,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
-            },
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = accentColor,
-                unfocusedBorderColor = accentColor.copy(alpha = 0.42f),
-                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surface
-            ),
-            shape = RoundedCornerShape(14.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag(testTag)
-        )
+        // Full-Width LTR OutlinedTextField: 100% of the field width shows the number clearly!
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            OutlinedTextField(
+                value = value,
+                onValueChange = { newText ->
+                    onValueChange(NumberFormatter.normalizeInputString(newText))
+                },
+                singleLine = true,
+                visualTransformation = SharedThousandsVisualTransformation,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                textStyle = MaterialTheme.typography.titleMedium.copy(
+                    fontFamily = RobotoMonoFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = dynamicFontSize,
+                    textAlign = TextAlign.Left,
+                    textDirection = TextDirection.Ltr
+                ),
+                leadingIcon = if (leadingIcon != null) {
+                    {
+                        Icon(
+                            imageVector = leadingIcon,
+                            contentDescription = label,
+                            tint = accentColor,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                } else null,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = accentColor,
+                    unfocusedBorderColor = accentColor.copy(alpha = 0.35f),
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                ),
+                shape = RoundedCornerShape(13.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(testTag)
+            )
+        }
 
         if (!helperText.isNullOrEmpty()) {
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = helperText,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Spacer(modifier = Modifier.height(3.dp))
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.Start,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "= $helperText",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = RobotoMonoFontFamily,
+                            textDirection = TextDirection.Ltr
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
+            }
         }
     }
 }
@@ -252,6 +501,7 @@ fun TubeCompositionVisualBar(
     serumPercent: Double,
     modifier: Modifier = Modifier
 ) {
+    var displayUnit by remember { mutableStateOf(VolumeUnit.ML) }
     val total = (cellVolumeMl + mediaVolumeMl + serumVolumeMl).coerceAtLeast(0.0001)
     val cellFrac by animateFloatAsState(
         targetValue = (cellVolumeMl / total).toFloat().coerceIn(0.05f, 1f),
@@ -271,40 +521,67 @@ fun TubeCompositionVisualBar(
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-        )
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "ترکیب حجمی نهایی در فالکون / فلاسک",
+                    text = "نسبت ترکیب نهایی",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold
                 )
-                Text(
-                    text = "کل: ${NumberFormatter.formatVolumeWithMicroliter(cellVolumeMl + mediaVolumeMl + serumVolumeMl)}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { displayUnit = displayUnit.toggle() }
+                ) {
+                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Text(
+                                text = NumberFormatter.formatWithCommas(
+                                    displayUnit.fromMl(cellVolumeMl + mediaVolumeMl + serumVolumeMl),
+                                    4
+                                ),
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontFamily = RobotoMonoFontFamily,
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                text = "${displayUnit.symbol} ⇄",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // Segmented horizontal liquid bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(26.dp)
-                    .clip(RoundedCornerShape(13.dp))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), RoundedCornerShape(13.dp))
+                    .height(20.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), RoundedCornerShape(10.dp))
             ) {
                 if (cellVolumeMl > 0) {
                     Box(
@@ -332,30 +609,33 @@ fun TubeCompositionVisualBar(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // Legend items with exact mL & µL
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 LegendPill(
-                    title = "سوسپانسیون سلول",
+                    title = "سلول (V₁)",
                     volumeMl = cellVolumeMl,
+                    unit = displayUnit,
+                    onClick = { displayUnit = displayUnit.toggle() },
                     color = CellCyan,
                     modifier = Modifier.weight(1f)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
                 LegendPill(
                     title = "مدیا پایه",
                     volumeMl = mediaVolumeMl,
+                    unit = displayUnit,
+                    onClick = { displayUnit = displayUnit.toggle() },
                     color = MediaCoral,
                     modifier = Modifier.weight(1f)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
                 LegendPill(
-                    title = "سرم (${NumberFormatter.formatClean(serumPercent, 1)}٪)",
+                    title = "سرم (${NumberFormatter.formatWithCommas(serumPercent, 1)}٪)",
                     volumeMl = serumVolumeMl,
+                    unit = displayUnit,
+                    onClick = { displayUnit = displayUnit.toggle() },
                     color = SerumAmber,
                     modifier = Modifier.weight(1f)
                 )
@@ -368,47 +648,70 @@ fun TubeCompositionVisualBar(
 private fun LegendPill(
     title: String,
     volumeMl: Double,
+    unit: VolumeUnit,
+    onClick: () -> Unit,
     color: Color,
     modifier: Modifier = Modifier
 ) {
+    val formattedNum = NumberFormatter.formatWithCommas(unit.fromMl(volumeMl), 4)
+    val numFontSize = adaptiveMonospaceFontSize(formattedNum, baseSp = 13.5f, minSp = 10f)
+
     Surface(
-        modifier = modifier,
-        color = color.copy(alpha = 0.11f),
-        shape = RoundedCornerShape(12.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.35f))
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .clickable { onClick() },
+        color = color.copy(alpha = 0.10f),
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.3f))
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(color)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.width(3.dp))
+                Text(
+                    text = unit.symbol,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = color,
+                    fontWeight = FontWeight.Bold
                 )
             }
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "${NumberFormatter.formatClean(volumeMl, 3)} mL",
-                style = MaterialTheme.typography.labelLarge,
-                color = color,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "${NumberFormatter.formatClean(volumeMl * 1000.0, 1)} µL",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            // Dedicated full-width row for the number so it never collides with unit
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.Start,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = formattedNum,
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontFamily = RobotoMonoFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = numFontSize
+                        ),
+                        color = color,
+                        maxLines = 1
+                    )
+                }
+            }
         }
     }
 }

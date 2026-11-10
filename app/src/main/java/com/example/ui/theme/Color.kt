@@ -2,40 +2,49 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Bio-Laboratory Precision Palette
-val LabDeepTeal = Color(0xFF0B2E33)
-val LabDarkSurface = Color(0xFF10373D)
-val LabDarkCard = Color(0xFF16444B)
+// Modern Royal Indigo & Sapphire Bio-Lab Palette (Day & Night)
+val LabDeepIndigo = Color(0xFF0B0F19)
+val LabDarkSurface = Color(0xFF131B2E)
+val LabDarkCard = Color(0xFF1E2942)
 
-val BioTealPrimary = Color(0xFF00797C)
-val BioTealLight = Color(0xFF2EC4B6)
-val BioTealContainer = Color(0xFFD6F5F2)
-val OnBioTealContainer = Color(0xFF002021)
+// Keep alias for compatibility where referenced
+val LabDeepTeal = Color(0xFF1E1B4B)
+
+val BioIndigoPrimary = Color(0xFF4F46E5)
+val BioIndigoLight = Color(0xFF818CF8)
+val BioIndigoContainer = Color(0xFFE0E7FF)
+val OnBioIndigoContainer = Color(0xFF1E1B4B)
+
+// Keep semantic alias so existing imports work seamlessly with the new palette
+val BioTealPrimary = BioIndigoPrimary
+val BioTealLight = BioIndigoLight
+val BioTealContainer = BioIndigoContainer
+val OnBioTealContainer = OnBioIndigoContainer
 
 // Semantic Lab Liquid Colors
-// Phenol-Red DMEM/RPMI Media Hue
-val MediaCoral = Color(0xFFD9385A)
-val MediaCoralLight = Color(0xFFFF6B8B)
-val MediaCoralSoft = Color(0xFFFFE8ED)
+// Rose-Coral Media Hue
+val MediaCoral = Color(0xFFE11D48)
+val MediaCoralLight = Color(0xFFFB7185)
+val MediaCoralSoft = Color(0xFFFFE4E6)
 
 // Golden Amber FBS / Serum Hue
 val SerumAmber = Color(0xFFD97706)
 val SerumAmberLight = Color(0xFFFBBF24)
-val SerumAmberSoft = Color(0xFFFFF4DC)
+val SerumAmberSoft = Color(0xFFFEF3C7)
 
-// Cell Suspension Cyan/Emerald Hue
-val CellCyan = Color(0xFF008B8B)
+// Cell Suspension Cobalt/Sky Hue
+val CellCyan = Color(0xFF0284C7)
 val CellCyanLight = Color(0xFF38BDF8)
-val CellCyanSoft = Color(0xFFE0F7FA)
+val CellCyanSoft = Color(0xFFE0F2FE)
 
 // Viability & Status Colors
 val ViableGreen = Color(0xFF10B981)
 val DeadCellRed = Color(0xFFEF4444)
-val CentrifugePurple = Color(0xFF7C3AED)
+val CentrifugePurple = Color(0xFF9333EA)
 
-// Neutral Lab Surfaces
-val LightLabBackground = Color(0xFFF3F8F8)
+// Neutral Day Mode Surfaces
+val LightLabBackground = Color(0xFFF5F7FB)
 val LightLabSurface = Color(0xFFFFFFFF)
-val LightLabSurfaceVariant = Color(0xFFE3EFEF)
-val LightLabOnSurface = Color(0xFF0F292C)
-val LightLabOnSurfaceVariant = Color(0xFF3F5E62)
+val LightLabSurfaceVariant = Color(0xFFEEF2FF)
+val LightLabOnSurface = Color(0xFF0F172A)
+val LightLabOnSurfaceVariant = Color(0xFF475569)

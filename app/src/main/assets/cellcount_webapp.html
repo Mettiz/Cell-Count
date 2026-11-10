@@ -3,1233 +3,773 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#0B2E33" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>CellCount Lab — وب‌اپ محاسبه‌گر کانت سلولی، مدیا و سرم</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@500;700&family=Vazirmatn:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <meta name="theme-color" content="#4F46E5" />
+  <title>CellCount Lab | M. Hsn | محاسبه‌گر کانت، رقت، سرم و شمارش میکروسکوپی</title>
   <style>
     :root {
-      --bg: #0B2E33;
-      --surface: #113C42;
-      --card: #164850;
-      --card-border: rgba(46, 196, 182, 0.25);
-      --text: #ECFAFA;
-      --text-muted: #9CC5C9;
-      --teal: #2EC4B6;
-      --cyan: #38BDF8;
-      --coral: #FF6B8B;
-      --amber: #FBBF24;
+      --bg: #F5F7FB;
+      --surface: #FFFFFF;
+      --surface-var: #EEF2FF;
+      --text: #0F172A;
+      --text-muted: #475569;
+      --border: #CBD5E1;
+      --primary: #4F46E5;
+      --primary-soft: #E0E7FF;
+      --cell: #0284C7;
+      --media: #E11D48;
+      --serum: #D97706;
       --green: #10B981;
       --red: #EF4444;
-      --purple: #A78BFA;
-      --radius: 18px;
     }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: 'Vazirmatn', system-ui, -apple-system, sans-serif;
+    body.dark {
+      --bg: #0B0F19;
+      --surface: #131B2E;
+      --surface-var: #1E2942;
+      --text: #F1F5F9;
+      --text-muted: #94A3B8;
+      --border: #334155;
+      --primary: #818CF8;
+      --primary-soft: #312E81;
+      --cell: #38BDF8;
+      --media: #FB7185;
+      --serum: #FBBF24;
+      --green: #34D399;
+      --red: #F87171;
     }
-
-    body {
-      background: radial-gradient(circle at top right, #134E56 0%, #0B2E33 65%, #071F23 100%);
-      color: var(--text);
-      min-height: 100vh;
-      padding-bottom: 90px;
-      line-height: 1.6;
-    }
-
-    .mono {
-      font-family: 'Roboto Mono', monospace;
-      direction: ltr;
-      display: inline-block;
-    }
-
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, 'Segoe UI', Tahoma, sans-serif; }
+    body { background: var(--bg); color: var(--text); min-height: 100vh; padding-bottom: 84px; transition: background 0.2s, color 0.2s; }
     header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       position: sticky;
       top: 0;
-      z-index: 30;
-      backdrop-filter: blur(14px);
-      background: rgba(11, 46, 51, 0.88);
-      border-bottom: 1px solid var(--card-border);
-      padding: 14px 18px;
+      z-index: 20;
     }
-
-    .header-inner {
-      max-width: 820px;
-      margin: 0 auto;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-badge {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--primary-soft); color: var(--primary);
+      display: flex; align-items: center; justify-content: center; font-weight: 800;
     }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
+    .author-pill {
+      display: inline-block; background: var(--primary-soft); color: var(--primary);
+      padding: 2px 8px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; margin-right: 6px;
     }
-
-    .brand-icon {
-      width: 42px;
-      height: 42px;
-      border-radius: 12px;
-      background: linear-gradient(135deg, rgba(46,196,182,0.25), rgba(251,191,36,0.2));
-      border: 1px solid rgba(46,196,182,0.45);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 22px;
+    .theme-btn {
+      background: var(--surface-var); color: var(--text);
+      border: 1px solid var(--border); border-radius: 10px;
+      padding: 7px 12px; cursor: pointer; font-weight: 700; font-size: 0.85rem;
     }
-
-    .brand h1 {
-      font-size: 1.15rem;
-      font-weight: 800;
-      color: #fff;
-    }
-
-    .brand p {
-      font-size: 0.76rem;
-      color: var(--text-muted);
-    }
-
-    .container {
-      max-width: 820px;
-      margin: 18px auto;
-      padding: 0 14px;
-    }
-
-    .hero-card {
-      background: linear-gradient(135deg, rgba(22, 72, 80, 0.95), rgba(11, 46, 51, 0.95));
-      border: 1px solid var(--card-border);
-      border-radius: 22px;
-      padding: 18px 20px;
-      margin-bottom: 16px;
-      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.25);
-    }
-
-    .badge {
-      display: inline-block;
-      font-size: 0.74rem;
-      font-weight: 700;
-      color: #A7F3D0;
-      background: rgba(16, 185, 129, 0.16);
-      border: 1px solid rgba(16, 185, 129, 0.35);
-      padding: 3px 10px;
-      border-radius: 99px;
-      margin-bottom: 8px;
-    }
-
-    .hero-card h2 {
-      font-size: 1.12rem;
-      margin-bottom: 4px;
-    }
-
-    .hero-card p {
-      font-size: 0.82rem;
-      color: var(--text-muted);
-    }
-
+    .container { max-width: 680px; margin: 0 auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; }
     .card {
-      background: rgba(22, 72, 80, 0.72);
-      border: 1px solid var(--card-border);
-      border-radius: var(--radius);
-      padding: 16px;
-      margin-bottom: 16px;
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px;
     }
-
-    .card-title {
-      font-size: 0.98rem;
-      font-weight: 700;
-      margin-bottom: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
+    .unit-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .seg-group {
+      display: flex; background: var(--surface-var); padding: 3px; border-radius: 10px; gap: 4px; margin-top: 4px;
     }
-
-    .grid-2 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
+    .seg-btn {
+      flex: 1; border: none; background: transparent; color: var(--text-muted);
+      padding: 6px 4px; border-radius: 8px; font-weight: 700; font-size: 0.8rem; cursor: pointer;
     }
-
-    .grid-3 {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
-    }
-
-    @media (max-width: 560px) {
-      .grid-2, .grid-3 {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    .field-group {
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-    }
-
-    .field-label {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-size: 0.82rem;
-      font-weight: 600;
-    }
-
-    .dot {
-      width: 9px;
-      height: 9px;
-      border-radius: 50%;
-      display: inline-block;
-      margin-left: 6px;
-    }
-
-    .field-badge {
-      font-size: 0.68rem;
-      padding: 2px 7px;
-      border-radius: 6px;
-      background: rgba(255, 255, 255, 0.1);
-      color: var(--teal);
-      cursor: pointer;
-    }
-
+    .seg-btn.active { background: var(--primary); color: #fff; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .field label { font-size: 0.8rem; font-weight: 700; display: flex; align-items: center; gap: 5px; }
     .input-wrap {
-      position: relative;
-      display: flex;
-      align-items: center;
-      background: rgba(9, 34, 38, 0.85);
-      border: 1.5px solid rgba(46, 196, 182, 0.38);
-      border-radius: 13px;
-      padding: 4px 10px;
-      transition: border-color 0.2s, box-shadow 0.2s;
+      direction: ltr;
+      display: flex; align-items: center; border: 1.5px solid var(--border);
+      border-radius: 12px; background: var(--surface); overflow: hidden;
     }
-
-    .input-wrap:focus-within {
-      border-color: var(--teal);
-      box-shadow: 0 0 0 3px rgba(46, 196, 182, 0.18);
-    }
-
-    .input-wrap.coral { border-color: rgba(255, 107, 139, 0.45); }
-    .input-wrap.amber { border-color: rgba(251, 191, 36, 0.45); }
-    .input-wrap.cyan  { border-color: rgba(56, 189, 248, 0.45); }
-
     .input-wrap input {
-      width: 100%;
-      border: none;
-      outline: none;
-      background: transparent;
-      color: #fff;
-      font-size: 1.05rem;
-      font-weight: 700;
-      font-family: 'Roboto Mono', monospace;
-      direction: ltr;
-      text-align: left;
-      padding: 7px 4px;
+      width: 100%; border: none; background: transparent; color: var(--text);
+      padding: 9px 10px; font-size: 1rem; font-weight: 700; outline: none;
+      direction: ltr; text-align: left; font-family: monospace;
     }
-
     .unit-pill {
-      font-size: 0.73rem;
-      font-weight: 700;
-      padding: 3px 8px;
-      border-radius: 8px;
-      background: rgba(46, 196, 182, 0.15);
-      color: var(--teal);
-      white-space: nowrap;
-      margin-right: 6px;
+      background: var(--surface-var); color: var(--primary); border: none;
+      border-left: 1px solid var(--border); padding: 9px 8px;
+      font-size: 0.78rem; font-weight: 800; cursor: pointer; white-space: nowrap;
     }
-
-    .helper-text {
-      font-size: 0.74rem;
-      color: var(--text-muted);
+    .helper {
+      direction: ltr; text-align: left;
+      font-size: 0.74rem; color: var(--text-muted); padding: 0 4px;
     }
-
-    .chips-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 7px;
-      margin-top: 8px;
-    }
-
+    .chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-top: 6px; }
     .chip {
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      background: rgba(11, 46, 51, 0.7);
-      color: var(--text);
-      padding: 5px 12px;
-      border-radius: 99px;
-      font-size: 0.78rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.15s;
+      border: 1px solid var(--border); background: var(--surface-var); color: var(--text);
+      border-radius: 99px; padding: 5px 11px; font-size: 0.78rem; font-weight: 700; cursor: pointer; white-space: nowrap;
     }
-
-    .chip.active {
-      background: var(--teal);
-      color: #062326;
-      border-color: var(--teal);
-      font-weight: 800;
+    .chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .bar-track {
+      height: 18px; border-radius: 9px; overflow: hidden; display: flex;
+      background: var(--surface-var); border: 1px solid var(--border); margin: 10px 0;
     }
-
-    .chip.amber.active {
-      background: var(--amber);
-      color: #2A1700;
-      border-color: var(--amber);
+    .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    .tile {
+      border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px; cursor: pointer;
+      background: var(--surface);
     }
-
-    /* Visual Composition Bar */
-    .tube-bar {
-      height: 26px;
-      border-radius: 13px;
-      overflow: hidden;
-      display: flex;
-      background: #082226;
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      margin: 12px 0;
+    .tile-title { font-size: 0.75rem; color: var(--text-muted); display: flex; justify-content: space-between; }
+    .tile-val-row {
+      direction: ltr; display: flex; justify-content: space-between; align-items: center;
+      margin-top: 4px; font-weight: 800; font-size: 0.96rem; font-family: monospace;
     }
-
-    .seg-cell  { background: var(--cyan); transition: width 0.25s; }
-    .seg-media { background: var(--coral); transition: width 0.25s; }
-    .seg-serum { background: var(--amber); transition: width 0.25s; }
-
-    .metric-box {
-      background: rgba(9, 34, 38, 0.75);
-      border: 1px solid rgba(255, 255, 255, 0.14);
-      border-radius: 14px;
-      padding: 12px;
-      text-align: center;
+    .nav-bar {
+      position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface);
+      border-top: 1px solid var(--border); display: flex; justify-content: space-around; padding: 8px 0; z-index: 30;
     }
-
-    .metric-box .label {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-    }
-
-    .metric-box .val {
-      font-size: 1.15rem;
-      font-weight: 800;
-      margin: 4px 0 2px;
-      font-family: 'Roboto Mono', monospace;
-      direction: ltr;
-    }
-
-    .metric-box .sub {
-      font-size: 0.73rem;
-      color: var(--text-muted);
-      direction: ltr;
-    }
-
-    .btn {
-      border: none;
-      border-radius: 13px;
-      padding: 11px 16px;
-      font-size: 0.86rem;
-      font-weight: 700;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      transition: transform 0.1s, opacity 0.2s;
-    }
-
-    .btn:active { transform: scale(0.98); }
-    .btn-primary { background: var(--teal); color: #052225; }
-    .btn-amber   { background: var(--amber); color: #2B1700; }
-    .btn-outline {
-      background: transparent;
-      color: var(--text);
-      border: 1.5px solid rgba(46, 196, 182, 0.55);
-    }
-    .btn-danger {
-      background: rgba(239, 68, 68, 0.18);
-      color: #FCA5A5;
-      border: 1px solid rgba(239, 68, 68, 0.4);
-      padding: 6px 10px;
-      font-size: 0.75rem;
-    }
-
-    /* Bottom Navigation */
-    .bottom-nav {
-      position: fixed;
-      bottom: 0;
-      right: 0;
-      left: 0;
-      background: rgba(9, 34, 38, 0.95);
-      backdrop-filter: blur(14px);
-      border-top: 1px solid var(--card-border);
-      display: flex;
-      justify-content: space-around;
-      padding: 8px 6px;
-      z-index: 40;
-    }
-
     .nav-item {
-      background: none;
-      border: none;
-      color: var(--text-muted);
-      font-size: 0.76rem;
-      font-weight: 600;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 3px;
-      padding: 6px 14px;
-      border-radius: 12px;
-      cursor: pointer;
+      border: none; background: transparent; color: var(--text-muted);
+      font-size: 0.82rem; font-weight: 700; padding: 6px 12px; border-radius: 10px; cursor: pointer;
     }
-
-    .nav-item.active {
-      color: #062326;
-      background: var(--teal);
-      font-weight: 800;
+    .nav-item.active { background: var(--primary-soft); color: var(--primary); }
+    .hidden { display: none; }
+    .btn-primary {
+      background: var(--primary); color: #fff; border: none; border-radius: 11px;
+      padding: 10px 14px; font-weight: 700; cursor: pointer; width: 100%; margin-top: 8px;
     }
-
-    .tab-section { display: none; }
-    .tab-section.active { display: block; }
-
-    .alert-box {
-      background: rgba(167, 139, 250, 0.15);
-      border: 1px solid rgba(167, 139, 250, 0.45);
-      border-radius: 14px;
-      padding: 12px;
-      margin-bottom: 12px;
-      font-size: 0.8rem;
+    .btn-outline {
+      background: var(--surface-var); color: var(--text); border: 1px solid var(--border); border-radius: 11px;
+      padding: 9px 12px; font-weight: 700; cursor: pointer; font-size: 0.82rem;
     }
-
-    .step-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 9px 0;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    #slideCanvas {
+      width: 100%; aspect-ratio: 1 / 1; border-radius: 14px; background: #0E1B2A;
+      cursor: crosshair; display: block; margin: 10px 0; touch-action: manipulation;
     }
-
-    .step-row:last-child { border-bottom: none; }
   </style>
 </head>
 <body>
-
   <header>
-    <div class="header-inner">
-      <div class="brand">
-        <div class="brand-icon">🧬</div>
-        <div>
-          <h1>CellCount Lab Web</h1>
-          <p>وب‌اپ هوشمند محاسبه کانت سلولی، رقت مدیا، درصد سرم و میکس سلولی</p>
+    <div class="brand">
+      <div class="brand-badge">CC</div>
+      <div>
+        <div style="font-weight:800;font-size:1rem;">
+          CellCount Lab <span class="author-pill">M. Hsn</span>
         </div>
+        <div id="themeSubtitle" style="font-size:0.74rem;color:var(--text-muted);">By M. Hsn • حالت روز فعال</div>
       </div>
-      <button class="btn btn-outline" onclick="copyReport()">📋 کپی گزارش</button>
     </div>
+    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌙 حالت شب</button>
   </header>
 
-  <main class="container">
-    <!-- TAB 1: OMNI-DIRECTIONAL DILUTION, MEDIA & SERUM -->
-    <section id="tab-dilution" class="tab-section active">
-      <div class="hero-card">
-        <span class="badge">فرمول دوطرفه: C₁ × V₁ = C₂ × V₂ + تنظیم دقیق سرم</span>
-        <h2>محاسبه‌گر دوطرفه کانت، مدیا و سرم (FBS)</h2>
-        <p>هر پارامتری را تغییر دهید (کانت تارگت، حجم نهایی، درصد سرم یا حجم مدیا)؛ بقیه مقادیر به صورت خودکار و لحظه‌ای محاسبه می‌شوند.</p>
-      </div>
-
-      <!-- Mode & Unit -->
-      <div class="card">
-        <div class="card-title">تنظیم واحد شمارش و نحوه برداشت از استوک</div>
-        <div class="chips-row" id="unit-chips">
-          <button class="chip active" onclick="setUnit(1e6, '×10⁶/mL', this)">×10⁶ سلول/mL (میلیون)</button>
-          <button class="chip" onclick="setUnit(1e5, '×10⁵/mL', this)">×10⁵ سلول/mL (صدهزار)</button>
-          <button class="chip" onclick="setUnit(1e4, '×10⁴/mL', this)">×10⁴ سلول/mL (ده‌هزار)</button>
-          <button class="chip" onclick="setUnit(1, 'cells/mL', this)">عدد کامل (cells/mL)</button>
-        </div>
-        <div class="chips-row" style="margin-top: 10px;">
-          <button id="mode-all" class="chip active" onclick="setStockMode('ALL')">استفاده از کل حجم سلول فعلی (V₁ ثابت)</button>
-          <button id="mode-withdraw" class="chip" onclick="setStockMode('WITHDRAW')">برداشت بخشی از استوک برای حجم و کانت مشخص</button>
+  <div id="tab-dilution" class="container">
+    <div class="card unit-bar">
+      <div>
+        <div style="font-size:0.74rem;color:var(--text-muted);">یکای حجم (تبدیل آنی)</div>
+        <div class="seg-group">
+          <button id="volBtnML" class="seg-btn active" onclick="setGlobalVolUnit('mL')">میلی‌لیتر (mL)</button>
+          <button id="volBtnL" class="seg-btn" onclick="setGlobalVolUnit('L')">لیتر (L)</button>
         </div>
       </div>
-
-      <!-- 1. Current Stock -->
-      <div class="card">
-        <div class="card-title">
-          <span>۱. مشخصات سوسپانسیون سلولی فعلی (استوک)</span>
-          <span class="helper-text" id="stock-total-cells">کل سلول: 5 × 10⁶</span>
-        </div>
-        <div class="grid-2">
-          <div class="field-group">
-            <div class="field-label">
-              <span><span class="dot" style="background:var(--cyan)"></span>حجم سلول فعلی (V₁)</span>
-              <span class="field-badge">قابل تغییر</span>
-            </div>
-            <div class="input-wrap cyan">
-              <span class="unit-pill">mL</span>
-              <input id="inp-v1" type="text" inputmode="decimal" value="2" oninput="onEditV1(this.value)" />
-            </div>
-            <div class="helper-text" id="hlp-v1">معادل 2000 µL</div>
-          </div>
-
-          <div class="field-group">
-            <div class="field-label">
-              <span><span class="dot" style="background:var(--cyan)"></span>کانت فعلی سلول (C₁)</span>
-              <span class="field-badge">قابل تغییر</span>
-            </div>
-            <div class="input-wrap cyan">
-              <span class="unit-pill unit-label">×10⁶/mL</span>
-              <input id="inp-c1" type="text" inputmode="decimal" value="2.5" oninput="onEditC1(this.value)" />
-            </div>
-            <div class="helper-text" id="hlp-c1">غلظت فعلی سوسپانسیون</div>
-          </div>
+      <div>
+        <div style="font-size:0.74rem;color:var(--text-muted);">یکای کانت (تبدیل آنی)</div>
+        <div class="seg-group">
+          <button id="cntBtnMil" class="seg-btn active" onclick="setGlobalCountUnit('MILLION')">میلیون</button>
+          <button id="cntBtnRaw" class="seg-btn" onclick="setGlobalCountUnit('RAW')">عدد کامل</button>
         </div>
       </div>
+    </div>
 
-      <!-- 2. Target Count <-> Final Volume -->
-      <div class="card">
-        <div class="card-title">
-          <span>۲. کانت تارگت (C₂) و حجم نهایی کل (V₂) — ارتباط دوطرفه</span>
-          <span class="helper-text" id="dilution-factor-txt">ضریب رقت: 5 برابر</span>
+    <div class="card">
+      <div style="font-weight:800;font-size:0.9rem;margin-bottom:10px;">۱. سلول فعلی و کانت / حجم هدف</div>
+      <div class="grid-2">
+        <div class="field">
+          <label>حجم فعلی (V₁)</label>
+          <div class="input-wrap">
+            <input id="v1Input" type="text" inputmode="decimal" value="2" oninput="handleNumericInput(this, onV1Change)" />
+            <button id="v1UnitBtn" class="unit-pill" onclick="toggleUnit('v1')">mL ⇄</button>
+          </div>
+          <div id="v1Helper" class="helper">= 0.002 L</div>
         </div>
-        <div class="grid-2">
-          <div class="field-group">
-            <div class="field-label">
-              <span><span class="dot" style="background:var(--teal)"></span>کانت تارگت (C₂)</span>
-              <span class="field-badge" id="badge-c2">محاسبه خودکار / قابل تغییر</span>
-            </div>
-            <div class="input-wrap">
-              <span class="unit-pill unit-label">×10⁶/mL</span>
-              <input id="inp-c2" type="text" inputmode="decimal" value="0.5" oninput="onEditC2(this.value)" />
-            </div>
-            <div class="helper-text">کانت تارگت را بدهید تا حجم نهایی حساب شود</div>
+        <div class="field">
+          <label>کانت فعلی (C₁)</label>
+          <div class="input-wrap">
+            <input id="c1Input" type="text" inputmode="decimal" value="2.5" oninput="handleNumericInput(this, onC1Change)" />
+            <button id="c1UnitBtn" class="unit-pill" onclick="toggleCountUnit('c1')">میلیون ⇄</button>
           </div>
-
-          <div class="field-group">
-            <div class="field-label">
-              <span><span class="dot" style="background:var(--teal)"></span>حجم نهایی کل (V₂)</span>
-              <span class="field-badge" id="badge-v2">محاسبه خودکار / قابل تغییر</span>
-            </div>
-            <div class="input-wrap">
-              <span class="unit-pill">mL</span>
-              <input id="inp-v2" type="text" inputmode="decimal" value="10" oninput="onEditV2(this.value)" />
-            </div>
-            <div class="helper-text" id="hlp-v2">یا حجم نهایی را بدهید تا کانت تارگت حساب شود!</div>
-          </div>
+          <div id="c1Helper" class="helper">= 2,500,000 عدد کامل</div>
         </div>
-
-        <div style="margin-top: 10px;">
-          <div class="helper-text">انتخاب سریع حجم نهایی (V₂) برای دیدن کانت تارگت متناظر:</div>
-          <div class="chips-row">
-            <button class="chip" onclick="quickSetV2(3)">3 mL</button>
-            <button class="chip" onclick="quickSetV2(5)">5 mL</button>
-            <button class="chip" onclick="quickSetV2(8)">8 mL</button>
-            <button class="chip" onclick="quickSetV2(10)">10 mL</button>
-            <button class="chip" onclick="quickSetV2(12)">12 mL</button>
-            <button class="chip" onclick="quickSetV2(15)">15 mL</button>
-            <button class="chip" onclick="quickSetV2(20)">20 mL</button>
+        <div class="field">
+          <label>کانت تارگت (C₂)</label>
+          <div class="input-wrap">
+            <input id="c2Input" type="text" inputmode="decimal" value="0.5" oninput="handleNumericInput(this, onC2Change)" />
+            <button id="c2UnitBtn" class="unit-pill" onclick="toggleCountUnit('c2')">میلیون ⇄</button>
           </div>
+          <div id="c2Helper" class="helper">= 500,000 عدد کامل</div>
+        </div>
+        <div class="field">
+          <label>حجم نهایی (V₂)</label>
+          <div class="input-wrap">
+            <input id="v2Input" type="text" inputmode="decimal" value="10" oninput="handleNumericInput(this, onV2Change)" />
+            <button id="v2UnitBtn" class="unit-pill" onclick="toggleUnit('v2')">mL ⇄</button>
+          </div>
+          <div id="v2Helper" class="helper">= 0.01 L</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:800;font-size:0.9rem;margin-bottom:8px;">۲. محاسبه حجم مدیا و سرم (FBS)</div>
+      <div class="field" style="margin-bottom:8px;">
+        <label>درصد سرم (% FBS)</label>
+        <div class="input-wrap">
+          <input id="serumPctInput" type="text" inputmode="decimal" value="3" oninput="handleNumericInput(this, onSerumPctChange)" />
+          <span class="unit-pill">%</span>
+        </div>
+        <div class="chips">
+          <button class="chip" onclick="setSerumPct(0)">0%</button>
+          <button class="chip" onclick="setSerumPct(2)">2%</button>
+          <button class="chip active" onclick="setSerumPct(3)">3%</button>
+          <button class="chip" onclick="setSerumPct(5)">5%</button>
+          <button class="chip" onclick="setSerumPct(10)">10%</button>
+          <button class="chip" onclick="setSerumPct(15)">15%</button>
+          <button class="chip" onclick="setSerumPct(20)">20%</button>
         </div>
       </div>
 
-      <!-- 3. Serum % & Media / Serum Volumes -->
-      <div class="card">
-        <div class="card-title">
-          <span>۳. تنظیم درصد سرم (FBS %) و حجم مدیا و سرم</span>
+      <div class="grid-2">
+        <div class="field">
+          <label>حجم مدیا پایه</label>
+          <div class="input-wrap">
+            <input id="mediaInput" type="text" inputmode="decimal" value="7.76" oninput="handleNumericInput(this, onMediaChange)" />
+            <button id="mediaUnitBtn" class="unit-pill" onclick="toggleUnit('media')">mL ⇄</button>
+          </div>
+          <div id="mediaHelper" class="helper">= 0.00776 L</div>
         </div>
-
-        <div class="helper-text">انتخاب سریع درصد سرم (FBS):</div>
-        <div class="chips-row" id="serum-chips">
-          <button class="chip amber" onclick="quickSetSerum(0)">0%</button>
-          <button class="chip amber" onclick="quickSetSerum(1)">1%</button>
-          <button class="chip amber" onclick="quickSetSerum(2)">2%</button>
-          <button class="chip amber active" onclick="quickSetSerum(3)">3%</button>
-          <button class="chip amber" onclick="quickSetSerum(5)">5%</button>
-          <button class="chip amber" onclick="quickSetSerum(10)">10%</button>
-          <button class="chip amber" onclick="quickSetSerum(15)">15%</button>
-          <button class="chip amber" onclick="quickSetSerum(20)">20%</button>
+        <div class="field">
+          <label>حجم سرم</label>
+          <div class="input-wrap">
+            <input id="serumInput" type="text" inputmode="decimal" value="0.24" oninput="handleNumericInput(this, onSerumVolChange)" />
+            <button id="serumUnitBtn" class="unit-pill" onclick="toggleUnit('serum')">mL ⇄</button>
+          </div>
+          <div id="serumHelper" class="helper">= 0.00024 L</div>
         </div>
-
-        <div class="grid-2" style="margin-top: 12px;">
-          <div class="field-group">
-            <div class="field-label">
-              <span><span class="dot" style="background:var(--amber)"></span>درصد سرم مورد نظر (FBS %)</span>
-            </div>
-            <div class="input-wrap amber">
-              <span class="unit-pill" style="color:var(--amber)">%</span>
-              <input id="inp-serum-pct" type="text" inputmode="decimal" value="3" oninput="onEditSerumPct(this.value)" />
-            </div>
-          </div>
-
-          <div class="field-group">
-            <div class="field-label">
-              <span>مبنای محاسبه سرم</span>
-            </div>
-            <div class="chips-row" style="margin-top: 2px;">
-              <button id="basis-added" class="chip amber active" onclick="setSerumBasis('ADDED')">درصد از حجم اضافه‌شده (V₂ - V₁)</button>
-              <button id="basis-total" class="chip amber" onclick="setSerumBasis('TOTAL')">درصد از کل حجم نهایی (V₂)</button>
-            </div>
-          </div>
-        </div>
-
-        <div id="centrifuge-box" class="alert-box" style="display:none; margin-top: 12px;"></div>
-
-        <div class="grid-3" style="margin-top: 14px;">
-          <div class="field-group">
-            <div class="field-label">
-              <span><span class="dot" style="background:var(--coral)"></span>حجم مدیا پایه</span>
-              <span class="field-badge">قابل ویرایش</span>
-            </div>
-            <div class="input-wrap coral">
-              <span class="unit-pill" style="color:var(--coral)">mL</span>
-              <input id="inp-media-vol" type="text" inputmode="decimal" value="7.76" oninput="onEditMediaVol(this.value)" />
-            </div>
-            <div class="helper-text" id="hlp-media-ul">معادل 7760 µL</div>
-          </div>
-
-          <div class="field-group">
-            <div class="field-label">
-              <span><span class="dot" style="background:var(--amber)"></span>حجم سرم (FBS)</span>
-              <span class="field-badge">قابل ویرایش</span>
-            </div>
-            <div class="input-wrap amber">
-              <span class="unit-pill" style="color:var(--amber)">mL</span>
-              <input id="inp-serum-vol" type="text" inputmode="decimal" value="0.24" oninput="onEditSerumVol(this.value)" />
-            </div>
-            <div class="helper-text" id="hlp-serum-ul">معادل 240 µL</div>
-          </div>
-
-          <div class="field-group">
-            <div class="field-label">
-              <span><span class="dot" style="background:var(--green)"></span>کل حجم اضافه‌شده</span>
-              <span class="field-badge">قابل ویرایش</span>
-            </div>
-            <div class="input-wrap">
-              <span class="unit-pill" style="color:var(--green)">mL</span>
-              <input id="inp-added-vol" type="text" inputmode="decimal" value="8" oninput="onEditAddedVol(this.value)" />
-            </div>
-            <div class="helper-text" id="hlp-added-ul">مدیا + سرم = 8000 µL</div>
-          </div>
-        </div>
-
-        <!-- Visual Bar -->
-        <div class="tube-bar">
-          <div id="bar-cell" class="seg-cell" style="width: 20%"></div>
-          <div id="bar-media" class="seg-media" style="width: 77.6%"></div>
-          <div id="bar-serum" class="seg-serum" style="width: 2.4%"></div>
-        </div>
-
-        <div class="grid-3">
-          <div class="metric-box">
-            <div class="label">سوسپانسیون سلول (V₁)</div>
-            <div class="val" style="color:var(--cyan)" id="out-cell-ml">2 mL</div>
-            <div class="sub" id="out-cell-ul">2000 µL</div>
-          </div>
-          <div class="metric-box">
-            <div class="label">حجم مدیا پایه</div>
-            <div class="val" style="color:var(--coral)" id="out-media-ml">7.76 mL</div>
-            <div class="sub" id="out-media-ul">7760 µL</div>
-          </div>
-          <div class="metric-box">
-            <div class="label" id="out-serum-lbl">حجم سرم (3%)</div>
-            <div class="val" style="color:var(--amber)" id="out-serum-ml">0.24 mL</div>
-            <div class="sub" id="out-serum-ul">240 µL</div>
-          </div>
-        </div>
-
-        <div style="margin-top:12px; font-size:0.78rem; color:var(--text-muted);" id="both-basis-note"></div>
       </div>
-    </section>
+    </div>
 
-    <!-- TAB 2: MULTI-SAMPLE CELL MIXER -->
-    <section id="tab-mixer" class="tab-section">
-      <div class="hero-card">
-        <span class="badge">فرمول میکس: C_mix = Σ(Cᵢ × Vᵢ) / ΣVᵢ</span>
-        <h2>میکس چند سوسپانسیون سلولی با حجم و کانت متفاوت</h2>
-        <p>چندین نمونه سلولی با حجم و کانت مختلف را وارد کنید تا کانت نهایی میکس و حجم کل محاسبه شود.</p>
+    <div class="card">
+      <div style="font-weight:800;font-size:0.9rem;">خلاصه آماده پیپتینگ</div>
+      <div class="bar-track">
+        <div id="barCell" style="background:var(--cell);width:20%;"></div>
+        <div id="barMedia" style="background:var(--media);width:77.6%;"></div>
+        <div id="barSerum" style="background:var(--serum);width:2.4%;"></div>
+      </div>
+      <div class="summary-grid">
+        <div class="tile" onclick="toggleUnit('media')">
+          <div class="tile-title"><span>مدیا پایه</span><span>⇄</span></div>
+          <div class="tile-val-row" style="color:var(--media);"><span id="sumMediaNum">7.76</span><span id="sumMediaUnit">mL</span></div>
+        </div>
+        <div class="tile" onclick="toggleUnit('serum')">
+          <div class="tile-title"><span>سرم</span><span>⇄</span></div>
+          <div class="tile-val-row" style="color:var(--serum);"><span id="sumSerumNum">0.24</span><span id="sumSerumUnit">mL</span></div>
+        </div>
+        <div class="tile" onclick="toggleUnit('v2')">
+          <div class="tile-title"><span>حجم نهایی (V₂)</span><span>⇄</span></div>
+          <div class="tile-val-row" style="color:var(--primary);"><span id="sumV2Num">10</span><span id="sumV2Unit">mL</span></div>
+        </div>
+        <div class="tile" onclick="toggleCountUnit('c2')">
+          <div class="tile-title"><span>کانت تارگت (C₂)</span><span>⇄</span></div>
+          <div class="tile-val-row" style="color:var(--green);"><span id="sumC2Num">0.5</span><span id="sumC2Unit">میلیون</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-image" class="container hidden">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div style="font-weight:800;font-size:0.95rem;">شمارش سلول از روی عکس میکروسکوپ / لام</div>
+        <button id="imgResUnitBtn" class="chip active" onclick="toggleImgResultUnit()">میلیون ⇄</button>
+      </div>
+      <div class="tile" onclick="toggleImgResultUnit()" style="margin-bottom:8px;">
+        <div class="tile-title"><span>کانت سلول زنده (Viable Count)</span><span>کلیک برای تبدیل واحد ⇄</span></div>
+        <div class="tile-val-row" style="color:var(--primary);font-size:1.25rem;">
+          <span id="imgViableConcNum">0.32</span>
+          <span id="imgViableConcUnit">×10⁶/mL</span>
+        </div>
+      </div>
+      <div class="grid-3">
+        <div class="tile">
+          <div class="tile-title"><span>سلول زنده</span></div>
+          <div class="tile-val-row" style="color:var(--green);"><span id="imgLiveCnt">16</span><span>سلول</span></div>
+        </div>
+        <div class="tile">
+          <div class="tile-title"><span>سلول مرده</span></div>
+          <div class="tile-val-row" style="color:var(--red);"><span id="imgDeadCnt">3</span><span>سلول</span></div>
+        </div>
+        <div class="tile">
+          <div class="tile-title"><span>زنده‌مانی</span></div>
+          <div class="tile-val-row" style="color:var(--green);"><span id="imgViabilityPct">84.2</span><span>%</span></div>
+        </div>
+      </div>
+      <button class="btn-primary" onclick="sendImageCountToDilution()">انتقال کانت عکس به بخش رقت و سرم</button>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <button class="btn-outline" style="flex:1;" onclick="resetSampleSlide()">شان نمونه میکروسکوپی</button>
+        <button class="btn-outline" onclick="clearSlideMarkers()">پاک‌سازی نشانه‌ها</button>
       </div>
 
-      <div class="card">
-        <div class="card-title">
-          <span>نتیجه لحظه‌ای میکس سلولی</span>
-          <button class="btn btn-primary" onclick="transferMixToDilution()">انتقال میکس به محاسبه مدیا و سرم ⬅</button>
+      <div class="chips">
+        <button id="toolLiveBtn" class="chip active" onclick="setMarkerTool('LIVE')">🟢 سلول زنده (+)</button>
+        <button id="toolDeadBtn" class="chip" onclick="setMarkerTool('DEAD')">🔴 سلول مرده (+)</button>
+        <button id="toolEraseBtn" class="chip" onclick="setMarkerTool('ERASE')">⌫ حذف نشانه</button>
+      </div>
+
+      <canvas id="slideCanvas" width="420" height="420"></canvas>
+
+      <div class="grid-2" style="margin-top:8px;">
+        <div class="field">
+          <label>ضریب رقت (مثلاً تریپان بلو)</label>
+          <div class="input-wrap">
+            <input id="imgDilInput" type="text" inputmode="decimal" value="2" oninput="handleNumericInput(this, recalcImageCount)" />
+            <span class="unit-pill">برابر (×)</span>
+          </div>
         </div>
-        <div class="grid-3">
-          <div class="metric-box">
-            <div class="label">کانت نهایی میکس</div>
-            <div class="val" style="color:var(--teal)" id="mix-out-count">1.662</div>
-            <div class="sub unit-label">×10⁶/mL</div>
-          </div>
-          <div class="metric-box">
-            <div class="label">حجم کل میکس</div>
-            <div class="val" style="color:var(--cyan)" id="mix-out-vol">6.5 mL</div>
-            <div class="sub" id="mix-out-vol-ul">6500 µL</div>
-          </div>
-          <div class="metric-box">
-            <div class="label">مجموع کل سلول‌ها</div>
-            <div class="val" style="color:var(--amber)" id="mix-out-cells">10.8</div>
-            <div class="sub">× 10⁶ cells</div>
+        <div class="field">
+          <label>تعداد خانه در عکس</label>
+          <div class="input-wrap">
+            <input id="imgSqInput" type="text" inputmode="decimal" value="1" oninput="handleNumericInput(this, recalcImageCount)" />
+            <span class="unit-pill">خانه</span>
           </div>
         </div>
       </div>
+    </div>
+  </div>
 
-      <div id="mixer-samples-container"></div>
-
-      <button class="btn btn-outline" style="width:100%; margin-bottom:14px;" onclick="addMixerSample()">
-        + افزودن نمونه سلولی جدید به میکس
-      </button>
-
-      <div class="card">
-        <div class="field-group">
-          <div class="field-label">
-            <span>حجم مدیا یا بافر بدون سلول اضافه‌شده به میکس (اختیاری)</span>
-          </div>
-          <div class="input-wrap coral">
-            <span class="unit-pill" style="color:var(--coral)">mL</span>
-            <input id="inp-mix-extra" type="text" inputmode="decimal" value="0" oninput="renderMixer()" />
-          </div>
+  <div id="tab-mixer" class="container hidden">
+    <div class="card">
+      <div style="font-weight:800;font-size:0.95rem;margin-bottom:8px;">میکس چند نمونه سلولی (mL/L و میلیون/عدد کامل)</div>
+      <div class="summary-grid">
+        <div class="tile" onclick="toggleMixCountUnit()">
+          <div class="tile-title"><span>کانت نهایی میکس</span><span>⇄</span></div>
+          <div class="tile-val-row" style="color:var(--primary);"><span id="mixFinalCountNum">1.6615</span><span id="mixFinalCountUnit">میلیون</span></div>
+        </div>
+        <div class="tile" onclick="toggleMixVolUnit()">
+          <div class="tile-title"><span>حجم کل میکس</span><span>⇄</span></div>
+          <div class="tile-val-row" style="color:var(--cell);"><span id="mixFinalVolNum">6.5</span><span id="mixFinalVolUnit">mL</span></div>
         </div>
       </div>
-    </section>
+      <div id="mixerSamplesList" style="margin-top:12px;display:flex;flex-direction:column;gap:10px;"></div>
+      <button class="btn-primary" onclick="addMixSample()">+ افزودن نمونه سلولی</button>
+    </div>
+  </div>
 
-    <!-- TAB 3: NEUBAUER CHAMBER COUNTER -->
-    <section id="tab-neubauer" class="tab-section">
-      <div class="hero-card">
-        <span class="badge">فرمول لام نئوبار: میانگین هر خانه × ضریب رقت × 10⁴</span>
-        <h2>شمارشگر لام نئوبار و درصد زنده‌مانی (Trypan Blue)</h2>
-        <p>تعداد سلول‌های زنده و مرده در ۴ خانه بزرگ لام نئوبار را وارد کنید.</p>
-      </div>
-
-      <div class="card">
-        <div class="card-title">
-          <span>نتیجه شمارش نئوبار</span>
-          <button class="btn btn-primary" onclick="transferNeubauerToDilution()">ارسال به محاسبه مدیا و سرم ⬅</button>
-        </div>
-        <div class="grid-3">
-          <div class="metric-box">
-            <div class="label">کانت سلول زنده / mL</div>
-            <div class="val" style="color:var(--teal)" id="nb-out-count">0.82 ×10⁶</div>
-            <div class="sub" id="nb-out-raw">820,000 cells/mL</div>
-          </div>
-          <div class="metric-box">
-            <div class="label">درصد زنده‌مانی (Viability)</div>
-            <div class="val" style="color:var(--green)" id="nb-out-viability">94.3%</div>
-            <div class="sub" id="nb-out-ratio">164 زنده از 174</div>
-          </div>
-          <div class="metric-box">
-            <div class="label">میانگین زنده هر خانه</div>
-            <div class="val" style="color:var(--amber)" id="nb-out-avg">41</div>
-            <div class="sub">سلول در هر مربع</div>
-          </div>
-        </div>
-
-        <div class="grid-2" style="margin-top:14px;">
-          <div class="field-group">
-            <div class="field-label">ضریب رقت تریپان بلو (Dilution Factor)</div>
-            <div class="input-wrap">
-              <span class="unit-pill">X برابر</span>
-              <input id="nb-dilution" type="text" inputmode="decimal" value="2" oninput="calcNeubauer()" />
-            </div>
-          </div>
-          <div class="field-group">
-            <div class="field-label">حجم سوسپانسیون فعلی (mL)</div>
-            <div class="input-wrap cyan">
-              <span class="unit-pill">mL</span>
-              <input id="nb-vol" type="text" inputmode="decimal" value="5" oninput="calcNeubauer()" />
-            </div>
-          </div>
-        </div>
-
-        <div class="grid-2" style="margin-top:14px;">
-          <div class="field-group">
-            <div class="field-label">خانه ۱ (زنده / مرده)</div>
-            <div style="display:flex; gap:8px;">
-              <div class="input-wrap"><span class="unit-pill">زنده</span><input id="nb-l1" type="number" value="42" oninput="calcNeubauer()"/></div>
-              <div class="input-wrap coral"><span class="unit-pill" style="color:var(--coral)">مرده</span><input id="nb-d1" type="number" value="3" oninput="calcNeubauer()"/></div>
-            </div>
-          </div>
-          <div class="field-group">
-            <div class="field-label">خانه ۲ (زنده / مرده)</div>
-            <div style="display:flex; gap:8px;">
-              <div class="input-wrap"><span class="unit-pill">زنده</span><input id="nb-l2" type="number" value="38" oninput="calcNeubauer()"/></div>
-              <div class="input-wrap coral"><span class="unit-pill" style="color:var(--coral)">مرده</span><input id="nb-d2" type="number" value="2" oninput="calcNeubauer()"/></div>
-            </div>
-          </div>
-          <div class="field-group">
-            <div class="field-label">خانه ۳ (زنده / مرده)</div>
-            <div style="display:flex; gap:8px;">
-              <div class="input-wrap"><span class="unit-pill">زنده</span><input id="nb-l3" type="number" value="45" oninput="calcNeubauer()"/></div>
-              <div class="input-wrap coral"><span class="unit-pill" style="color:var(--coral)">مرده</span><input id="nb-d3" type="number" value="4" oninput="calcNeubauer()"/></div>
-            </div>
-          </div>
-          <div class="field-group">
-            <div class="field-label">خانه ۴ (زنده / مرده)</div>
-            <div style="display:flex; gap:8px;">
-              <div class="input-wrap"><span class="unit-pill">زنده</span><input id="nb-l4" type="number" value="39" oninput="calcNeubauer()"/></div>
-              <div class="input-wrap coral"><span class="unit-pill" style="color:var(--coral)">مرده</span><input id="nb-d4" type="number" value="1" oninput="calcNeubauer()"/></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <nav class="bottom-nav">
-    <button class="nav-item active" onclick="switchTab('dilution', this)">
-      <span>🧪</span>
-      <span>رقت، مدیا و سرم</span>
-    </button>
-    <button class="nav-item" onclick="switchTab('mixer', this)">
-      <span>🧬</span>
-      <span>میکس چند سلول</span>
-    </button>
-    <button class="nav-item" onclick="switchTab('neubauer', this)">
-      <span>🔬</span>
-      <span>شمارش نئوبار</span>
-    </button>
+  <nav class="nav-bar">
+    <button id="navDil" class="nav-item active" onclick="switchTab('dilution')">رقت و سرم</button>
+    <button id="navImg" class="nav-item" onclick="switchTab('image')">شمارش با عکس</button>
+    <button id="navMix" class="nav-item" onclick="switchTab('mixer')">میکس سلولی</button>
   </nav>
 
   <script>
-    const persianDigits = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
-    const arabicDigits  = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
-
-    function parseNum(raw) {
-      if (raw === undefined || raw === null) return 0;
-      let str = String(raw).trim();
-      for (let i = 0; i < 10; i++) {
-        str = str.replaceAll(persianDigits[i], i).replaceAll(arabicDigits[i], i);
-      }
-      str = str.replaceAll('٫', '.').replaceAll(',', '.').replaceAll('/', '.');
-      const v = parseFloat(str);
-      return isNaN(v) || v < 0 ? 0 : v;
-    }
-
-    function fmt(val, dec = 3) {
-      if (!isFinite(val) || val <= 0) return '0';
-      const p = Math.pow(10, dec);
-      return String(Math.round(val * p) / p);
-    }
-
-    let state = {
-      v1: 2,
-      c1: 2.5,
-      c2: 0.5,
-      v2: 10,
-      serumPct: 3,
-      mediaVol: 7.76,
-      serumVol: 0.24,
-      addedVol: 8,
-      unitFactor: 1e6,
-      unitShort: '×10⁶/mL',
-      stockMode: 'ALL',     // 'ALL' or 'WITHDRAW'
-      serumBasis: 'ADDED',  // 'ADDED' or 'TOTAL'
-      anchor: 'C2'          // 'C2' or 'V2'
-    };
-
-    let mixerSamples = [
-      { id: 1, name: 'نمونه سلولی ۱ (فلاسک A)', vol: '3', count: '2.4' },
-      { id: 2, name: 'نمونه سلولی ۲ (فلاسک B)', vol: '2', count: '1.2' },
-      { id: 3, name: 'نمونه سلولی ۳ (فلاسک C)', vol: '1.5', count: '0.8' }
+    const units = { v1: 'mL', v2: 'mL', media: 'mL', serum: 'mL' };
+    const countUnits = { c1: 'MILLION', c2: 'MILLION' };
+    let mixVolUnit = 'mL';
+    let mixCountUnit = 'MILLION';
+    let mixSamples = [
+      { v: 3, vUnit: 'mL', c: 2.4, cUnit: 'MILLION' },
+      { v: 2, vUnit: 'mL', c: 1.2, cUnit: 'MILLION' },
+      { v: 1.5, vUnit: 'mL', c: 0.8, cUnit: 'MILLION' }
     ];
-    let nextMixId = 4;
+    let imgMarkerTool = 'LIVE';
+    let imgResultUnit = 'MILLION';
+    let slideMarkers = [];
 
-    function setUnit(factor, shortLabel, btn) {
-      state.unitFactor = factor;
-      state.unitShort = shortLabel;
-      document.querySelectorAll('#unit-chips .chip').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      document.querySelectorAll('.unit-label').forEach(el => el.textContent = shortLabel);
-      syncUI();
+    function resetSampleSlide() {
+      slideMarkers = [
+        { x: 0.18, y: 0.22, live: true }, { x: 0.34, y: 0.19, live: true },
+        { x: 0.52, y: 0.24, live: true }, { x: 0.71, y: 0.21, live: false },
+        { x: 0.82, y: 0.31, live: true }, { x: 0.23, y: 0.41, live: true },
+        { x: 0.44, y: 0.39, live: true }, { x: 0.62, y: 0.44, live: true },
+        { x: 0.77, y: 0.48, live: true }, { x: 0.19, y: 0.63, live: false },
+        { x: 0.36, y: 0.58, live: true }, { x: 0.54, y: 0.62, live: true },
+        { x: 0.69, y: 0.66, live: true }, { x: 0.83, y: 0.69, live: true },
+        { x: 0.26, y: 0.79, live: true }, { x: 0.45, y: 0.81, live: true },
+        { x: 0.61, y: 0.78, live: false }, { x: 0.75, y: 0.83, live: true },
+        { x: 0.31, y: 0.48, live: true }
+      ];
+      drawSlideCanvas();
+      recalcImageCount();
     }
 
-    function setStockMode(mode) {
-      state.stockMode = mode;
-      document.getElementById('mode-all').classList.toggle('active', mode === 'ALL');
-      document.getElementById('mode-withdraw').classList.toggle('active', mode === 'WITHDRAW');
-      recalcFromStock();
-      syncUI();
+    function setMarkerTool(tool) {
+      imgMarkerTool = tool;
+      document.getElementById('toolLiveBtn').classList.toggle('active', tool === 'LIVE');
+      document.getElementById('toolDeadBtn').classList.toggle('active', tool === 'DEAD');
+      document.getElementById('toolEraseBtn').classList.toggle('active', tool === 'ERASE');
     }
 
-    function setSerumBasis(basis) {
-      state.serumBasis = basis;
-      document.getElementById('basis-added').classList.toggle('active', basis === 'ADDED');
-      document.getElementById('basis-total').classList.toggle('active', basis === 'TOTAL');
-      recalcMediaAndSerum();
-      syncUI();
+    function clearSlideMarkers() {
+      slideMarkers = [];
+      drawSlideCanvas();
+      recalcImageCount();
     }
 
-    function recalcMediaAndSerum() {
-      const vAdd = Math.max(0, state.v2 - state.v1);
-      state.addedVol = vAdd;
-      const sFrac = Math.min(1, Math.max(0, state.serumPct / 100));
-      if (state.serumBasis === 'ADDED') {
-        state.serumVol = vAdd * sFrac;
-        state.mediaVol = Math.max(0, vAdd - state.serumVol);
-      } else {
-        state.serumVol = Math.min(vAdd, state.v2 * sFrac);
-        state.mediaVol = Math.max(0, vAdd - state.serumVol);
+    function drawSlideCanvas() {
+      const canvas = document.getElementById('slideCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width, h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+      const grad = ctx.createRadialGradient(w/2, h/2, 20, w/2, h/2, w*0.65);
+      grad.addColorStop(0, '#1E3A5F');
+      grad.addColorStop(1, '#0B1727');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
+      ctx.strokeStyle = 'rgba(224, 242, 254, 0.42)';
+      ctx.lineWidth = 1.5;
+      const pad = w * 0.08, gw = w - pad * 2;
+      ctx.strokeRect(pad, pad, gw, gw);
+      for (let i = 1; i <= 3; i++) {
+        const p = pad + (gw / 4) * i;
+        ctx.beginPath(); ctx.moveTo(p, pad); ctx.lineTo(p, pad + gw); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(pad, p); ctx.lineTo(pad + gw, p); ctx.stroke();
       }
-    }
-
-    function recalcFromStock() {
-      if (state.c1 <= 0) return;
-      if (state.stockMode === 'WITHDRAW') {
-        state.v1 = (state.c2 * state.v2) / state.c1;
-      } else if (state.anchor === 'C2' && state.c2 > 0) {
-        state.v2 = (state.c1 * state.v1) / state.c2;
-      } else if (state.v2 > 0) {
-        state.c2 = (state.c1 * state.v1) / state.v2;
-      }
-      recalcMediaAndSerum();
-    }
-
-    function onEditV1(val) {
-      state.v1 = parseNum(val);
-      recalcFromStock();
-      syncUI('inp-v1');
-    }
-
-    function onEditC1(val) {
-      state.c1 = parseNum(val);
-      recalcFromStock();
-      syncUI('inp-c1');
-    }
-
-    function onEditC2(val) {
-      state.c2 = parseNum(val);
-      state.anchor = 'C2';
-      if (state.c2 > 0 && state.c1 > 0) {
-        if (state.stockMode === 'ALL') {
-          state.v2 = (state.c1 * state.v1) / state.c2;
-        } else {
-          state.v1 = (state.c2 * state.v2) / state.c1;
-        }
-        recalcMediaAndSerum();
-      }
-      syncUI('inp-c2');
-    }
-
-    function onEditV2(val) {
-      state.v2 = parseNum(val);
-      state.anchor = 'V2';
-      if (state.v2 > 0 && state.c1 > 0) {
-        if (state.stockMode === 'ALL') {
-          state.c2 = (state.c1 * state.v1) / state.v2;
-        } else {
-          state.v1 = (state.c2 * state.v2) / state.c1;
-        }
-        recalcMediaAndSerum();
-      }
-      syncUI('inp-v2');
-    }
-
-    function quickSetV2(v) {
-      document.getElementById('inp-v2').value = v;
-      onEditV2(v);
-    }
-
-    function quickSetSerum(pct) {
-      document.getElementById('inp-serum-pct').value = pct;
-      onEditSerumPct(pct);
-      document.querySelectorAll('#serum-chips .chip').forEach(c => {
-        c.classList.toggle('active', c.textContent === pct + '%');
+      slideMarkers.forEach(m => {
+        const cx = m.x * w, cy = m.y * h;
+        const r = Math.max(3.5, w * 0.0105);
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fillStyle = m.live ? 'rgba(16, 185, 129, 0.16)' : 'rgba(239, 68, 68, 0.18)';
+        ctx.fill();
+        ctx.lineWidth = 1.6;
+        ctx.strokeStyle = m.live ? '#10B981' : '#EF4444';
+        ctx.stroke();
       });
     }
 
-    function onEditSerumPct(val) {
-      state.serumPct = Math.min(100, parseNum(val));
-      recalcMediaAndSerum();
-      syncUI('inp-serum-pct');
+    function recalcImageCount() {
+      const live = slideMarkers.filter(m => m.live).length;
+      const dead = slideMarkers.filter(m => !m.live).length;
+      const total = live + dead;
+      const viab = total > 0 ? (live * 100 / total) : 0;
+      const dil = Math.max(0.1, parseNum(document.getElementById('imgDilInput').value) || 1);
+      const sq = Math.max(0.1, parseNum(document.getElementById('imgSqInput').value) || 1);
+      const rawPerMl = (live / sq) * dil * 10000;
+      document.getElementById('imgLiveCnt').textContent = fmt(live, 0);
+      document.getElementById('imgDeadCnt').textContent = fmt(dead, 0);
+      document.getElementById('imgViabilityPct').textContent = fmt(viab, 1);
+      const disp = imgResultUnit === 'MILLION' ? fmt(rawPerMl / 1e6, 4) : fmt(rawPerMl, 0);
+      document.getElementById('imgViableConcNum').textContent = disp;
+      document.getElementById('imgViableConcUnit').textContent = imgResultUnit === 'MILLION' ? '×10⁶/mL' : 'سلول/mL';
+      document.getElementById('imgResUnitBtn').textContent = (imgResultUnit === 'MILLION' ? 'میلیون' : 'عدد کامل') + ' ⇄';
     }
 
-    function onEditMediaVol(val) {
-      const vMedia = parseNum(val);
-      state.mediaVol = vMedia;
-      const sFrac = Math.min(0.999, Math.max(0, state.serumPct / 100));
-      if (state.serumBasis === 'ADDED') {
-        state.addedVol = (1 - sFrac) > 0 ? vMedia / (1 - sFrac) : vMedia;
-        state.serumVol = Math.max(0, state.addedVol - vMedia);
-      } else {
-        state.serumVol = (1 - sFrac) > 0 ? ((state.v1 + vMedia) * sFrac) / (1 - sFrac) : 0;
-        state.addedVol = vMedia + state.serumVol;
+    function toggleImgResultUnit() {
+      imgResultUnit = imgResultUnit === 'MILLION' ? 'RAW' : 'MILLION';
+      recalcImageCount();
+    }
+
+    function sendImageCountToDilution() {
+      const live = slideMarkers.filter(m => m.live).length;
+      const dil = Math.max(0.1, parseNum(document.getElementById('imgDilInput').value) || 1);
+      const sq = Math.max(0.1, parseNum(document.getElementById('imgSqInput').value) || 1);
+      const rawPerMl = (live / sq) * dil * 10000;
+      if (rawPerMl > 0) {
+        document.getElementById('c1Input').value = fmt(fromRaw(rawPerMl, countUnits.c1), countUnits.c1 === 'RAW' ? 0 : 4);
+        recalcFromTargetCount();
+        switchTab('dilution');
       }
-      state.v2 = state.v1 + state.addedVol;
-      state.c2 = state.v2 > 0 ? (state.c1 * state.v1) / state.v2 : 0;
-      state.anchor = 'V2';
-      syncUI('inp-media-vol');
     }
 
-    function onEditSerumVol(val) {
-      const vSerum = parseNum(val);
-      state.serumVol = vSerum;
-      const sFrac = Math.min(1, Math.max(0, state.serumPct / 100));
-      if (sFrac > 0) {
-        if (state.serumBasis === 'ADDED') {
-          state.addedVol = vSerum / sFrac;
-          state.mediaVol = Math.max(0, state.addedVol - vSerum);
-        } else {
-          const v2Target = vSerum / sFrac;
-          state.addedVol = Math.max(vSerum, v2Target - state.v1);
-          state.mediaVol = Math.max(0, state.addedVol - vSerum);
+    function stripNum(str) {
+      if (!str) return '';
+      const persian = '۰۱۲۳۴۵۶۷۸۹';
+      const arabic = '٠١٢٣٤٥٦٧٨٩';
+      let out = '', hasDot = false;
+      for (const ch of String(str)) {
+        const p = persian.indexOf(ch);
+        if (p >= 0) { out += p; continue; }
+        const a = arabic.indexOf(ch);
+        if (a >= 0) { out += a; continue; }
+        if (ch === '.' || ch === '٫' || ch === '/') {
+          if (!hasDot) { out += '.'; hasDot = true; }
+        } else if (ch >= '0' && ch <= '9') {
+          out += ch;
         }
-        state.v2 = state.v1 + state.addedVol;
-        state.c2 = state.v2 > 0 ? (state.c1 * state.v1) / state.v2 : 0;
       }
-      syncUI('inp-serum-vol');
+      return out;
     }
 
-    function onEditAddedVol(val) {
-      const vAdd = parseNum(val);
-      state.addedVol = vAdd;
-      state.v2 = state.v1 + vAdd;
-      state.c2 = state.v2 > 0 ? (state.c1 * state.v1) / state.v2 : 0;
-      recalcMediaAndSerum();
-      syncUI('inp-added-vol');
+    function addCommasToStr(raw) {
+      const clean = stripNum(raw);
+      if (!clean) return '';
+      const parts = clean.split('.');
+      parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      return parts.length > 1 ? parts[0] + '.' + parts[1] : parts[0];
     }
 
-    function syncUI(skipId) {
-      const setVal = (id, v, d = 3) => {
-        if (skipId !== id) document.getElementById(id).value = fmt(v, d);
-      };
-      setVal('inp-v1', state.v1, 3);
-      setVal('inp-c1', state.c1, 4);
-      setVal('inp-c2', state.c2, 4);
-      setVal('inp-v2', state.v2, 3);
-      setVal('inp-serum-pct', state.serumPct, 2);
-      setVal('inp-media-vol', state.mediaVol, 3);
-      setVal('inp-serum-vol', state.serumVol, 3);
-      setVal('inp-added-vol', state.addedVol, 3);
+    function parseNum(str) {
+      const clean = stripNum(str);
+      return parseFloat(clean) || 0;
+    }
 
-      document.getElementById('hlp-v1').textContent = `معادل ${fmt(state.v1 * 1000, 1)} µL`;
-      document.getElementById('hlp-v2').textContent = `معادل ${fmt(state.v2 * 1000, 1)} µL`;
-      document.getElementById('hlp-media-ul').textContent = `معادل ${fmt(state.mediaVol * 1000, 1)} µL`;
-      document.getElementById('hlp-serum-ul').textContent = `معادل ${fmt(state.serumVol * 1000, 1)} µL`;
-      document.getElementById('hlp-added-ul').textContent = `مدیا + سرم = ${fmt(state.addedVol * 1000, 1)} µL`;
+    function fmt(n, d = 4) {
+      if (!isFinite(n) || n <= 0) return '0';
+      return addCommasToStr(Number(n.toFixed(d)).toString());
+    }
 
-      const totalCells = state.v1 * state.c1;
-      document.getElementById('stock-total-cells').textContent = `کل سلول: ${fmt(totalCells, 3)} (${state.unitShort.replace('/mL','')})`;
-      const df = state.c2 > 0 ? state.c1 / state.c2 : 0;
-      document.getElementById('dilution-factor-txt').textContent = `ضریب رقت: ${fmt(df, 2)} برابر`;
-
-      // Centrifuge alert when C2 > C1
-      const cBox = document.getElementById('centrifuge-box');
-      if (state.c2 > state.c1 && state.c1 > 0) {
-        const resMedia = state.v2 * (1 - state.serumPct / 100);
-        const resSerum = state.v2 * (state.serumPct / 100);
-        cBox.style.display = 'block';
-        cBox.innerHTML = `<strong>⚠️ کانت تارگت بیشتر از کانت فعلی است (نیاز به سانتریفیوژ):</strong><br/>سوسپانسیون را سانتریفیوژ کرده، مایع رویی را دور بریزید و پلت سلولی را در <strong>${fmt(resMedia, 3)} mL (${fmt(resMedia*1000,1)} µL) مدیا پایه</strong> + <strong>${fmt(resSerum, 3)} mL (${fmt(resSerum*1000,1)} µL) سرم</strong> حل کنید تا به حجم نهایی ${fmt(state.v2,3)} mL برسید.`;
-      } else {
-        cBox.style.display = 'none';
+    function handleNumericInput(el, callback) {
+      const cursor = el.selectionStart || 0;
+      const digitsBefore = stripNum(el.value.slice(0, cursor)).length;
+      const formatted = addCommasToStr(el.value);
+      el.value = formatted;
+      let newPos = 0, seen = 0;
+      while (newPos < formatted.length && seen < digitsBefore) {
+        if (formatted[newPos] !== ',') seen++;
+        newPos++;
       }
-
-      // Update visual bar & summary cards
-      const totalV = Math.max(0.0001, state.v1 + state.mediaVol + state.serumVol);
-      document.getElementById('bar-cell').style.width = ((state.v1 / totalV) * 100) + '%';
-      document.getElementById('bar-media').style.width = ((state.mediaVol / totalV) * 100) + '%';
-      document.getElementById('bar-serum').style.width = ((state.serumVol / totalV) * 100) + '%';
-
-      document.getElementById('out-cell-ml').textContent = `${fmt(state.v1, 3)} mL`;
-      document.getElementById('out-cell-ul').textContent = `${fmt(state.v1 * 1000, 1)} µL`;
-      document.getElementById('out-media-ml').textContent = `${fmt(state.mediaVol, 3)} mL`;
-      document.getElementById('out-media-ul').textContent = `${fmt(state.mediaVol * 1000, 1)} µL`;
-      document.getElementById('out-serum-lbl').textContent = `حجم سرم (${fmt(state.serumPct, 1)}%)`;
-      document.getElementById('out-serum-ml').textContent = `${fmt(state.serumVol, 3)} mL`;
-      document.getElementById('out-serum-ul').textContent = `${fmt(state.serumVol * 1000, 1)} µL`;
-
-      const vAdd = Math.max(0, state.v2 - state.v1);
-      const sAdded = vAdd * (state.serumPct / 100);
-      const mAdded = Math.max(0, vAdd - sAdded);
-      const sTotal = Math.min(vAdd, state.v2 * (state.serumPct / 100));
-      const mTotal = Math.max(0, vAdd - sTotal);
-      document.getElementById('both-basis-note').innerHTML =
-        `• <b>بر اساس حجم اضافه‌شده (${fmt(vAdd)} mL):</b> مدیا = ${fmt(mAdded)} mL (${fmt(mAdded*1000,1)} µL) | سرم = ${fmt(sAdded)} mL (${fmt(sAdded*1000,1)} µL)<br/>` +
-        `• <b>بر اساس کل حجم نهایی (${fmt(state.v2)} mL):</b> مدیا = ${fmt(mTotal)} mL (${fmt(mTotal*1000,1)} µL) | سرم = ${fmt(sTotal)} mL (${fmt(sTotal*1000,1)} µL)`;
+      el.setSelectionRange(newPos, newPos);
+      if (callback) callback();
     }
 
-    // MIXER LOGIC
+    function toMl(val, u) { return u === 'L' ? val * 1000 : val; }
+    function fromMl(ml, u) { return u === 'L' ? ml / 1000 : ml; }
+    function toRaw(val, u) { return u === 'MILLION' ? val * 1e6 : val; }
+    function fromRaw(raw, u) { return u === 'MILLION' ? raw / 1e6 : Math.round(raw); }
+
+    function toggleTheme() {
+      document.body.classList.toggle('dark');
+      const isDark = document.body.classList.contains('dark');
+      document.getElementById('themeBtn').textContent = isDark ? '☀️ حالت روز' : '🌙 حالت شب';
+      document.getElementById('themeSubtitle').textContent = 'By M. Hsn • ' + (isDark ? 'حالت شب فعال' : 'حالت روز فعال');
+    }
+
+    function switchTab(tab) {
+      document.getElementById('tab-dilution').classList.toggle('hidden', tab !== 'dilution');
+      document.getElementById('tab-image').classList.toggle('hidden', tab !== 'image');
+      document.getElementById('tab-mixer').classList.toggle('hidden', tab !== 'mixer');
+      document.getElementById('navDil').classList.toggle('active', tab === 'dilution');
+      document.getElementById('navImg').classList.toggle('active', tab === 'image');
+      document.getElementById('navMix').classList.toggle('active', tab === 'mixer');
+      if (tab === 'mixer') renderMixer();
+      if (tab === 'image') { drawSlideCanvas(); recalcImageCount(); }
+    }
+
+    function toggleUnit(field) {
+      const inp = document.getElementById(field + 'Input');
+      const ml = toMl(parseNum(inp.value), units[field]);
+      units[field] = units[field] === 'mL' ? 'L' : 'mL';
+      inp.value = fmt(fromMl(ml, units[field]), 5);
+      document.getElementById(field + 'UnitBtn').textContent = units[field] + ' ⇄';
+      refreshHelpers();
+    }
+
+    function toggleCountUnit(field) {
+      const inp = document.getElementById(field + 'Input');
+      const raw = toRaw(parseNum(inp.value), countUnits[field]);
+      countUnits[field] = countUnits[field] === 'MILLION' ? 'RAW' : 'MILLION';
+      inp.value = fmt(fromRaw(raw, countUnits[field]), countUnits[field] === 'RAW' ? 0 : 4);
+      document.getElementById(field + 'UnitBtn').textContent = (countUnits[field] === 'MILLION' ? 'میلیون' : 'عدد کامل') + ' ⇄';
+      refreshHelpers();
+    }
+
+    function setGlobalVolUnit(u) {
+      ['v1', 'v2', 'media', 'serum'].forEach(f => {
+        if (units[f] !== u) toggleUnit(f);
+      });
+      document.getElementById('volBtnML').classList.toggle('active', u === 'mL');
+      document.getElementById('volBtnL').classList.toggle('active', u === 'L');
+    }
+
+    function setGlobalCountUnit(u) {
+      ['c1', 'c2'].forEach(f => {
+        if (countUnits[f] !== u) toggleCountUnit(f);
+      });
+      document.getElementById('cntBtnMil').classList.toggle('active', u === 'MILLION');
+      document.getElementById('cntBtnRaw').classList.toggle('active', u === 'RAW');
+    }
+
+    function onV1Change() { recalcFromTargetCount(); }
+    function onC1Change() { recalcFromTargetCount(); }
+    function onC2Change() { recalcFromTargetCount(); }
+
+    function recalcFromTargetCount() {
+      const v1Ml = toMl(parseNum(document.getElementById('v1Input').value), units.v1);
+      const c1Raw = toRaw(parseNum(document.getElementById('c1Input').value), countUnits.c1);
+      const c2Raw = toRaw(parseNum(document.getElementById('c2Input').value), countUnits.c2);
+      if (c1Raw > 0 && c2Raw > 0) {
+        const v2Ml = (c1Raw * v1Ml) / c2Raw;
+        document.getElementById('v2Input').value = fmt(fromMl(v2Ml, units.v2), 5);
+        updateMediaSerum(v1Ml, v2Ml);
+      }
+      refreshHelpers();
+    }
+
+    function onV2Change() {
+      const v1Ml = toMl(parseNum(document.getElementById('v1Input').value), units.v1);
+      const c1Raw = toRaw(parseNum(document.getElementById('c1Input').value), countUnits.c1);
+      const v2Ml = toMl(parseNum(document.getElementById('v2Input').value), units.v2);
+      if (v2Ml > 0 && c1Raw > 0) {
+        const c2Raw = (c1Raw * v1Ml) / v2Ml;
+        document.getElementById('c2Input').value = fmt(fromRaw(c2Raw, countUnits.c2), countUnits.c2 === 'RAW' ? 0 : 4);
+        updateMediaSerum(v1Ml, v2Ml);
+      }
+      refreshHelpers();
+    }
+
+    function setSerumPct(p) {
+      document.getElementById('serumPctInput').value = String(p);
+      onSerumPctChange();
+    }
+
+    function onSerumPctChange() {
+      const v1Ml = toMl(parseNum(document.getElementById('v1Input').value), units.v1);
+      const v2Ml = toMl(parseNum(document.getElementById('v2Input').value), units.v2);
+      updateMediaSerum(v1Ml, v2Ml);
+      refreshHelpers();
+    }
+
+    function updateMediaSerum(v1Ml, v2Ml) {
+      const sPct = Math.min(100, Math.max(0, parseNum(document.getElementById('serumPctInput').value)));
+      const addMl = Math.max(0, v2Ml - v1Ml);
+      const serumMl = addMl * (sPct / 100);
+      const mediaMl = Math.max(0, addMl - serumMl);
+      document.getElementById('mediaInput').value = fmt(fromMl(mediaMl, units.media), 5);
+      document.getElementById('serumInput').value = fmt(fromMl(serumMl, units.serum), 5);
+    }
+
+    function onMediaChange() {
+      const v1Ml = toMl(parseNum(document.getElementById('v1Input').value), units.v1);
+      const c1Raw = toRaw(parseNum(document.getElementById('c1Input').value), countUnits.c1);
+      const mediaMl = toMl(parseNum(document.getElementById('mediaInput').value), units.media);
+      const sFrac = Math.min(0.999, Math.max(0, parseNum(document.getElementById('serumPctInput').value) / 100));
+      const addMl = mediaMl / (1 - sFrac);
+      const serumMl = Math.max(0, addMl - mediaMl);
+      const v2Ml = v1Ml + addMl;
+      const c2Raw = v2Ml > 0 ? (c1Raw * v1Ml) / v2Ml : 0;
+      document.getElementById('serumInput').value = fmt(fromMl(serumMl, units.serum), 5);
+      document.getElementById('v2Input').value = fmt(fromMl(v2Ml, units.v2), 5);
+      document.getElementById('c2Input').value = fmt(fromRaw(c2Raw, countUnits.c2), countUnits.c2 === 'RAW' ? 0 : 4);
+      refreshHelpers();
+    }
+
+    function onSerumVolChange() {
+      const v1Ml = toMl(parseNum(document.getElementById('v1Input').value), units.v1);
+      const c1Raw = toRaw(parseNum(document.getElementById('c1Input').value), countUnits.c1);
+      const serumMl = toMl(parseNum(document.getElementById('serumInput').value), units.serum);
+      const sFrac = Math.min(1, Math.max(0.0001, parseNum(document.getElementById('serumPctInput').value) / 100));
+      const addMl = serumMl / sFrac;
+      const mediaMl = Math.max(0, addMl - serumMl);
+      const v2Ml = v1Ml + addMl;
+      const c2Raw = v2Ml > 0 ? (c1Raw * v1Ml) / v2Ml : 0;
+      document.getElementById('mediaInput').value = fmt(fromMl(mediaMl, units.media), 5);
+      document.getElementById('v2Input').value = fmt(fromMl(v2Ml, units.v2), 5);
+      document.getElementById('c2Input').value = fmt(fromRaw(c2Raw, countUnits.c2), countUnits.c2 === 'RAW' ? 0 : 4);
+      refreshHelpers();
+    }
+
+    function refreshHelpers() {
+      ['v1', 'v2', 'media', 'serum'].forEach(f => {
+        const val = parseNum(document.getElementById(f + 'Input').value);
+        const ml = toMl(val, units[f]);
+        const opp = units[f] === 'mL' ? fmt(ml / 1000, 5) + ' L' : fmt(ml, 3) + ' mL';
+        document.getElementById(f + 'Helper').textContent = '= ' + opp;
+      });
+      ['c1', 'c2'].forEach(f => {
+        const val = parseNum(document.getElementById(f + 'Input').value);
+        const raw = toRaw(val, countUnits[f]);
+        const opp = countUnits[f] === 'MILLION' ? fmt(raw, 0) + ' عدد کامل' : fmt(raw / 1e6, 4) + ' میلیون';
+        document.getElementById(f + 'Helper').textContent = '= ' + opp;
+      });
+      document.getElementById('sumMediaNum').textContent = document.getElementById('mediaInput').value;
+      document.getElementById('sumMediaUnit').textContent = units.media;
+      document.getElementById('sumSerumNum').textContent = document.getElementById('serumInput').value;
+      document.getElementById('sumSerumUnit').textContent = units.serum;
+      document.getElementById('sumV2Num').textContent = document.getElementById('v2Input').value;
+      document.getElementById('sumV2Unit').textContent = units.v2;
+      document.getElementById('sumC2Num').textContent = document.getElementById('c2Input').value;
+      document.getElementById('sumC2Unit').textContent = countUnits.c2 === 'MILLION' ? 'میلیون' : 'عدد کامل';
+    }
+
     function renderMixer() {
-      const container = document.getElementById('mixer-samples-container');
+      const container = document.getElementById('mixerSamplesList');
       container.innerHTML = '';
-      let sumVol = 0;
-      let sumCells = 0;
-      mixerSamples.forEach((s) => {
-        const v = parseNum(s.vol);
-        const c = parseNum(s.count);
-        sumVol += v;
-        sumCells += v * c;
-      });
-      const extra = parseNum(document.getElementById('inp-mix-extra').value);
-      const finalMixVol = sumVol + extra;
-      const mixCount = finalMixVol > 0 ? sumCells / finalMixVol : 0;
-
-      document.getElementById('mix-out-count').textContent = fmt(mixCount, 4);
-      document.getElementById('mix-out-vol').textContent = `${fmt(finalMixVol, 3)} mL`;
-      document.getElementById('mix-out-vol-ul').textContent = `${fmt(finalMixVol * 1000, 1)} µL`;
-      document.getElementById('mix-out-cells').textContent = fmt(sumCells, 3);
-
-      mixerSamples.forEach((s, idx) => {
-        const v = parseNum(s.vol);
-        const c = parseNum(s.count);
-        const share = sumCells > 0 ? ((v * c) / sumCells) * 100 : 0;
-        const card = document.createElement('div');
-        card.className = 'card';
-        card.innerHTML = `
-          <div class="card-title">
-            <span>${s.name} (سهم سلولی: ${fmt(share, 1)}%)</span>
-            ${mixerSamples.length > 2 ? `<button class="btn btn-danger" onclick="removeMixerSample(${s.id})">حذف</button>` : ''}
-          </div>
-          <div class="grid-2">
-            <div class="field-group">
-              <div class="field-label">حجم نمونه ${idx + 1} (mL)</div>
-              <div class="input-wrap cyan">
-                <span class="unit-pill">mL</span>
-                <input type="text" inputmode="decimal" value="${s.vol}" oninput="updateMixVol(${s.id}, this.value)" />
-              </div>
-            </div>
-            <div class="field-group">
-              <div class="field-label">کانت نمونه ${idx + 1}</div>
-              <div class="input-wrap">
-                <span class="unit-pill">${state.unitShort}</span>
-                <input type="text" inputmode="decimal" value="${s.count}" oninput="updateMixCount(${s.id}, this.value)" />
-              </div>
+      let totalMl = 0, totalRaw = 0;
+      mixSamples.forEach((s, idx) => {
+        const ml = toMl(s.v, s.vUnit);
+        const raw = toRaw(s.c, s.cUnit);
+        totalMl += ml;
+        totalRaw += ml * raw;
+        const row = document.createElement('div');
+        row.className = 'grid-2';
+        row.innerHTML = `
+          <div class="field">
+            <label>حجم نمونه ${idx + 1}</label>
+            <div class="input-wrap">
+              <input type="text" inputmode="decimal" value="${addCommasToStr(s.v)}" oninput="handleNumericInput(this, () => updateMixV(${idx}, this.value))" />
+              <button class="unit-pill" onclick="toggleSampleVUnit(${idx})">${s.vUnit} ⇄</button>
             </div>
           </div>
-        `;
-        container.appendChild(card);
+          <div class="field">
+            <label>کانت نمونه ${idx + 1}</label>
+            <div class="input-wrap">
+              <input type="text" inputmode="decimal" value="${addCommasToStr(s.c)}" oninput="handleNumericInput(this, () => updateMixC(${idx}, this.value))" />
+              <button class="unit-pill" onclick="toggleSampleCUnit(${idx})">${s.cUnit === 'MILLION' ? 'میلیون' : 'عدد کامل'} ⇄</button>
+            </div>
+          </div>`;
+        container.appendChild(row);
       });
+      const finalRawPerMl = totalMl > 0 ? totalRaw / totalMl : 0;
+      document.getElementById('mixFinalVolNum').textContent = fmt(fromMl(totalMl, mixVolUnit), 4);
+      document.getElementById('mixFinalVolUnit').textContent = mixVolUnit;
+      document.getElementById('mixFinalCountNum').textContent = fmt(fromRaw(finalRawPerMl, mixCountUnit), mixCountUnit === 'RAW' ? 0 : 4);
+      document.getElementById('mixFinalCountUnit').textContent = mixCountUnit === 'MILLION' ? 'میلیون' : 'عدد کامل';
     }
-
-    function updateMixVol(id, val) {
-      const item = mixerSamples.find(x => x.id === id);
-      if (item) item.vol = val;
-      updateMixerSummaryOnly();
-    }
-
-    function updateMixCount(id, val) {
-      const item = mixerSamples.find(x => x.id === id);
-      if (item) item.count = val;
-      updateMixerSummaryOnly();
-    }
-
-    function updateMixerSummaryOnly() {
-      let sumVol = 0, sumCells = 0;
-      mixerSamples.forEach(s => {
-        const v = parseNum(s.vol), c = parseNum(s.count);
-        sumVol += v; sumCells += v * c;
-      });
-      const extra = parseNum(document.getElementById('inp-mix-extra').value);
-      const finalMixVol = sumVol + extra;
-      const mixCount = finalMixVol > 0 ? sumCells / finalMixVol : 0;
-      document.getElementById('mix-out-count').textContent = fmt(mixCount, 4);
-      document.getElementById('mix-out-vol').textContent = `${fmt(finalMixVol, 3)} mL`;
-      document.getElementById('mix-out-vol-ul').textContent = `${fmt(finalMixVol * 1000, 1)} µL`;
-      document.getElementById('mix-out-cells').textContent = fmt(sumCells, 3);
-    }
-
-    function addMixerSample() {
-      mixerSamples.push({
-        id: nextMixId++,
-        name: `نمونه سلولی ${mixerSamples.length + 1}`,
-        vol: '1',
-        count: '1.0'
-      });
+    function updateMixV(i, val) { mixSamples[i].v = parseNum(val); }
+    function updateMixC(i, val) { mixSamples[i].c = parseNum(val); }
+    function toggleSampleVUnit(i) {
+      const s = mixSamples[i];
+      const ml = toMl(s.v, s.vUnit);
+      s.vUnit = s.vUnit === 'mL' ? 'L' : 'mL';
+      s.v = parseNum(fmt(fromMl(ml, s.vUnit), 5));
       renderMixer();
     }
-
-    function removeMixerSample(id) {
-      if (mixerSamples.length <= 2) return;
-      mixerSamples = mixerSamples.filter(x => x.id !== id);
+    function toggleSampleCUnit(i) {
+      const s = mixSamples[i];
+      const raw = toRaw(s.c, s.cUnit);
+      s.cUnit = s.cUnit === 'MILLION' ? 'RAW' : 'MILLION';
+      s.c = parseNum(fmt(fromRaw(raw, s.cUnit), s.cUnit === 'RAW' ? 0 : 4));
       renderMixer();
     }
+    function toggleMixVolUnit() { mixVolUnit = mixVolUnit === 'mL' ? 'L' : 'mL'; renderMixer(); }
+    function toggleMixCountUnit() { mixCountUnit = mixCountUnit === 'MILLION' ? 'RAW' : 'MILLION'; renderMixer(); }
+    function addMixSample() { mixSamples.push({ v: 1, vUnit: mixVolUnit, c: 1, cUnit: mixCountUnit }); renderMixer(); }
 
-    function transferMixToDilution() {
-      let sumVol = 0, sumCells = 0;
-      mixerSamples.forEach(s => {
-        const v = parseNum(s.vol), c = parseNum(s.count);
-        sumVol += v; sumCells += v * c;
+    window.addEventListener('DOMContentLoaded', () => {
+      resetSampleSlide();
+      const canvas = document.getElementById('slideCanvas');
+      canvas.addEventListener('click', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const nx = (e.clientX - rect.left) / rect.width;
+        const ny = (e.clientY - rect.top) / rect.height;
+        const hitIdx = slideMarkers.findIndex(m => Math.hypot(m.x - nx, m.y - ny) < 0.055);
+        if (imgMarkerTool === 'ERASE') {
+          if (hitIdx >= 0) slideMarkers.splice(hitIdx, 1);
+        } else {
+          const isLive = imgMarkerTool === 'LIVE';
+          if (hitIdx >= 0) {
+            if (slideMarkers[hitIdx].live === isLive) slideMarkers.splice(hitIdx, 1);
+            else slideMarkers[hitIdx].live = isLive;
+          } else {
+            slideMarkers.push({ x: nx, y: ny, live: isLive });
+          }
+        }
+        drawSlideCanvas();
+        recalcImageCount();
       });
-      const extra = parseNum(document.getElementById('inp-mix-extra').value);
-      const finalMixVol = sumVol + extra;
-      const mixCount = finalMixVol > 0 ? sumCells / finalMixVol : 0;
-      if (finalMixVol > 0 && mixCount > 0) {
-        state.v1 = finalMixVol;
-        state.c1 = mixCount;
-        state.c2 = fmt(mixCount / 2, 3);
-        state.anchor = 'C2';
-        recalcFromStock();
-        syncUI();
-        switchTab('dilution', document.querySelectorAll('.nav-item')[0]);
-      }
-    }
-
-    // NEUBAUER LOGIC
-    function calcNeubauer() {
-      const l1 = parseNum(document.getElementById('nb-l1').value);
-      const l2 = parseNum(document.getElementById('nb-l2').value);
-      const l3 = parseNum(document.getElementById('nb-l3').value);
-      const l4 = parseNum(document.getElementById('nb-l4').value);
-      const d1 = parseNum(document.getElementById('nb-d1').value);
-      const d2 = parseNum(document.getElementById('nb-d2').value);
-      const d3 = parseNum(document.getElementById('nb-d3').value);
-      const d4 = parseNum(document.getElementById('nb-d4').value);
-      const df = Math.max(1, parseNum(document.getElementById('nb-dilution').value));
-
-      const totalLive = l1 + l2 + l3 + l4;
-      const totalDead = d1 + d2 + d3 + d4;
-      const totalAll  = totalLive + totalDead;
-      const avgLive   = totalLive / 4;
-      const viability = totalAll > 0 ? (totalLive / totalAll) * 100 : 0;
-      const cellsPerMl = avgLive * df * 10000;
-      const millionPerMl = cellsPerMl / 1e6;
-
-      document.getElementById('nb-out-count').textContent = `${fmt(millionPerMl, 3)} ×10⁶`;
-      document.getElementById('nb-out-raw').textContent = `${Math.round(cellsPerMl).toLocaleString()} cells/mL`;
-      document.getElementById('nb-out-viability').textContent = `${fmt(viability, 1)}%`;
-      document.getElementById('nb-out-ratio').textContent = `${totalLive} زنده از ${totalAll}`;
-      document.getElementById('nb-out-avg').textContent = fmt(avgLive, 2);
-      return millionPerMl;
-    }
-
-    function transferNeubauerToDilution() {
-      const millionPerMl = calcNeubauer();
-      const vol = Math.max(0.5, parseNum(document.getElementById('nb-vol').value));
-      if (millionPerMl > 0) {
-        state.v1 = vol;
-        state.c1 = millionPerMl;
-        state.c2 = fmt(millionPerMl / 2, 3);
-        state.anchor = 'C2';
-        recalcFromStock();
-        syncUI();
-        switchTab('dilution', document.querySelectorAll('.nav-item')[0]);
-      }
-    }
-
-    function switchTab(tabName, btn) {
-      document.querySelectorAll('.tab-section').forEach(s => s.classList.remove('active'));
-      document.getElementById('tab-' + tabName).classList.add('active');
-      document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-      if (btn) btn.classList.add('active');
-    }
-
-    function copyReport() {
-      const txt =
-        `=== گزارش CellCount Lab ===\n` +
-        `حجم سلول فعلی (V1): ${fmt(state.v1)} mL\n` +
-        `کانت فعلی (C1): ${fmt(state.c1)} (${state.unitShort})\n` +
-        `کانت تارگت (C2): ${fmt(state.c2)} (${state.unitShort})\n` +
-        `حجم نهایی (V2): ${fmt(state.v2)} mL\n` +
-        `حجم مدیا پایه: ${fmt(state.mediaVol)} mL (${fmt(state.mediaVol*1000,1)} µL)\n` +
-        `حجم سرم (${fmt(state.serumPct)}%): ${fmt(state.serumVol)} mL (${fmt(state.serumVol*1000,1)} µL)`;
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(txt);
-        alert('گزارش محاسبات کپی شد!');
-      }
-    }
-
-    syncUI();
-    renderMixer();
-    calcNeubauer();
+    });
   </script>
 </body>
 </html>

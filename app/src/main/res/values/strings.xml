@@ -1,11 +1,13 @@
 <resources>
     <string name="app_name">CellCount Lab</string>
-    <string name="app_subtitle">دستیار هوشمند کشت سلول، رقت مدیا، سرم و میکس سلولی</string>
+    <string name="author_name">M. Hsn</string>
+    <string name="app_subtitle">طراحی: M. Hsn | محاسبه‌گر کشت سلول، رقت، سرم و شمارش میکروسکوپی</string>
 
     <!-- Navigation Tabs -->
     <string name="tab_dilution">رقت و سرم</string>
     <string name="tab_mixer">میکس سلولی</string>
-    <string name="tab_hemocytometer">شمارش نئوبار</string>
+    <string name="tab_image_counter">شمارش با عکس</string>
+    <string name="tab_hemocytometer">لام نئوبار</string>
     <string name="tab_seeding">پلیت و تاریخچه</string>
 
     <!-- Dilution & Serum Screen -->
@@ -35,4 +37,9 @@
     <!-- Seeding & History Screen -->
     <string name="seeding_header_title">محاسبه‌گر پلیت‌ریزی و فلاسک + تاریخچه</string>
     <string name="seeding_header_desc">محاسبه دقیق حجم سوسپانسیون، مدیا و سرم برای کشت در پلیت‌های ۶ تا ۹۶ خانه و فلاسک‌ها به همراه خطای پیپتینگ.</string>
+
+    <!-- Google Play Store Listing Descriptions & Author Signature -->
+    <string name="author_signature">Designed &amp; Developed by M. Hsn</string>
+    <string name="play_store_short_description">دستیار هوشمند کشت سلول، شمارش میکروسکوپی لام نئوبار، رقت مدیا و سرم | By M. Hsn</string>
+    <string name="play_store_full_description">CellCount Lab دستیار تخصصی و هوشمند آزمایشگاه کشت سلول برای پژوهشگران، دانشجویان و متخصصان زیست‌فناوری، علوم پزشکی و زیست‌شناسی سلولی است.\n\nامکانات کلیدی اپلیکیشن برای کاربران:\n• آنالیز هوشمند و مستقیم عکس میکروسکوپ (Gemini AI + CLAHE): تشخیص مستقیم کل سلول‌ها، تفکیک سلول‌های زنده و مرده، تشخیص خطوط شبکه لام نئوبار، شناسایی سلول‌های واقع بر روی خطوط و تفکیک سلول‌های روی‌هم‌افتاده (خوشه‌ای) همراه با محاسبه خودکار کانت نهایی و درصد زنده‌مانی.\n• محاسبه‌گر دوطرفه رقت و سرم (C₁V₁ = C₂V₂): محاسبه آنی و دوطرفه حجم سوسپانسیون سلولی، حجم مدیای پایه، حجم سرم (FBS) و غلظت هدف با قابلیت قفل‌کردن کانت یا حجم نهایی.\n• میکس چند نمونه سلولی (Cell Mixer): ترکیب دقیق چند فلاسک یا فالکون با کانت‌ها و حجم‌های متفاوت و محاسبه غلظت نهایی و تعداد کل سلول‌ها.\n• شمارشگر لام نئوبار و زنده‌مانی (Hemocytometer): شمارش دستی سریع سلول‌های زنده و مرده با رنگ‌آمیزی تریپان بلو و انتقال مستقیم به بخش رقت و پلیت‌ریزی.\n• محاسبه‌گر پلیت‌ریزی و فلاسک (Seeding Calculator): محاسبه دقیق حجم استوک، مدیا و سرم برای پلیت‌های ۶، ۱۲، ۲۴، ۴۸ و ۹۶ خانه و فلاسک‌های T25، T75 و T175 با لحاظ‌کردن درصد خطای پیپتینگ (Overfill) و ذخیره در تاریخچه.\n\nطراحی و توسعه اختصاصی:\nDesigned &amp; Developed by M. Hsn</string>
 </resources>
