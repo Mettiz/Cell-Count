@@ -433,6 +433,7 @@ fun CellCountLabApp(
                             ImageCellCounterScreen(
                                 state = imageCounterState,
                                 onSelectTool = viewModel::selectImageMarkerTool,
+                                onSelectAiModel = viewModel::selectAiModel,
                                 onToggleGrid = viewModel::toggleImageGridOverlay,
                                 onOpenFullScreenEditor = viewModel::openFullScreenImageEditor,
                                 onCloseFullScreenEditor = viewModel::closeFullScreenImageEditor,

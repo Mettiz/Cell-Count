@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.model.ActiveEditedField
 import com.example.model.AiCellAnalysisUiState
+import com.example.model.AiModelOption
 import com.example.model.AppTab
 import com.example.model.CellMarkerTool
 import com.example.model.CellPointMarker
@@ -98,15 +99,26 @@ class CellCalculatorViewModel : ViewModel() {
         optionalProperties = listOf("verticalGridLines", "horizontalGridLines", "detectedCells", "detectedSquaresCount")
     )
 
-    private val geminiCellDetectorModel by lazy {
+    private val aiCellDetectionConfig by lazy {
+        generationConfig {
+            responseMimeType = "application/json"
+            responseSchema = aiCellDetectionSchema
+            temperature = 0.1f
+            maxOutputTokens = 4096
+        }
+    }
+
+    private val geminiArgonModel by lazy {
+        Firebase.ai.generativeModel(
+            modelName = "gemini-4-argon",
+            generationConfig = aiCellDetectionConfig
+        )
+    }
+
+    private val gemini38FlashModel by lazy {
         Firebase.ai.generativeModel(
             modelName = "gemini-3.8-flash",
-            generationConfig = generationConfig {
-                responseMimeType = "application/json"
-                responseSchema = aiCellDetectionSchema
-                temperature = 0.1f
-                maxOutputTokens = 4096
-            }
+            generationConfig = aiCellDetectionConfig
         )
     }
 
@@ -797,6 +809,10 @@ class CellCalculatorViewModel : ViewModel() {
         _imageCounterState.update { it.copy(activeTool = tool) }
     }
 
+    fun selectAiModel(modelOption: AiModelOption) {
+        _imageCounterState.update { it.copy(selectedAiModel = modelOption) }
+    }
+
     fun toggleImageGridOverlay() {
         _imageCounterState.update { it.copy(showGridOverlay = !it.showGridOverlay) }
     }
@@ -951,11 +967,12 @@ class CellCalculatorViewModel : ViewModel() {
                     isOverlapping = cand.isOverlapping
                 )
             }
+            val selectedModelOption = _imageCounterState.value.selectedAiModel
             _imageCounterState.update { state ->
                 state.copy(
                     markers = initialMarkers,
                     detectedGrid = directAnalysis.detectedGrid,
-                    imageSourceLabel = "$sourceLabel (در حال آنالیز مستقیم عکس با Gemini AI...)"
+                    imageSourceLabel = "$sourceLabel (در حال آنالیز مستقیم عکس با ${selectedModelOption.shortBadge}...)"
                 )
             }
 
@@ -983,13 +1000,38 @@ class CellCalculatorViewModel : ViewModel() {
                     6. Return JSON with liveCount, deadCount, onGridLineCount, overlappingCellCount, detectedSquaresCount, brightCenterLive, verticalGridLines, horizontalGridLines, detectedCells (up to 120 key cells with x, y in 0..1000, isLive, onGridLine, isOverlapping), and a comprehensive Persian analysisSummary.
                 """.trimIndent()
 
-                val response = withTimeout(60_000L) {
-                    geminiCellDetectorModel.generateContent(
-                        content {
-                            image(inferenceBitmap)
-                            text(prompt)
-                        }
-                    )
+                val multimodalContent = content {
+                    image(inferenceBitmap)
+                    text(prompt)
+                }
+
+                val primaryModel = when (selectedModelOption) {
+                    AiModelOption.GEMINI_4_ARGON -> geminiArgonModel
+                    AiModelOption.GEMINI_3_8_FLASH -> gemini38FlashModel
+                }
+                val fallbackModel = when (selectedModelOption) {
+                    AiModelOption.GEMINI_4_ARGON -> gemini38FlashModel
+                    AiModelOption.GEMINI_3_8_FLASH -> geminiArgonModel
+                }
+                var activeModelBadge = selectedModelOption.shortBadge
+
+                val response = try {
+                    withTimeout(60_000L) {
+                        primaryModel.generateContent(multimodalContent)
+                    }
+                } catch (primaryErr: Exception) {
+                    if (primaryErr is CancellationException && primaryErr !is TimeoutCancellationException) {
+                        throw primaryErr
+                    }
+                    Log.w(TAG, "Primary model (${selectedModelOption.modelId}) failed, trying fallback model", primaryErr)
+                    activeModelBadge = if (selectedModelOption == AiModelOption.GEMINI_4_ARGON) {
+                        AiModelOption.GEMINI_3_8_FLASH.shortBadge
+                    } else {
+                        AiModelOption.GEMINI_4_ARGON.shortBadge
+                    }
+                    withTimeout(60_000L) {
+                        fallbackModel.generateContent(multimodalContent)
+                    }
                 }
 
                 val jsonString = response.text
@@ -1071,7 +1113,7 @@ class CellCalculatorViewModel : ViewModel() {
                 publishFullSlideAnalysisState(
                     markers = calibratedMarkers,
                     detectedGrid = fusedGrid,
-                    sourceTitle = "آنالیز کامل با Gemini AI",
+                    sourceTitle = "آنالیز کامل با $activeModelBadge",
                     customAiSummary = aiSummary
                 )
             } catch (e: CancellationException) {

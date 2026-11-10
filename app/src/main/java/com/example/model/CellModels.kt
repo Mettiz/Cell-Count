@@ -210,6 +210,23 @@ data class DetectedNeubauerGrid(
     val totalLinesCount: Int get() = verticalLines.size + horizontalLines.size
 }
 
+enum class AiModelOption(
+    val modelId: String,
+    val displayName: String,
+    val shortBadge: String
+) {
+    GEMINI_4_ARGON(
+        modelId = "gemini-4-argon",
+        displayName = "Gemini 4 Argon (فوق‌دقیق)",
+        shortBadge = "Gemini 4 Argon"
+    ),
+    GEMINI_3_8_FLASH(
+        modelId = "gemini-3.8-flash",
+        displayName = "Gemini 3.8 Flash (سریع)",
+        shortBadge = "Gemini 3.8 Flash"
+    )
+}
+
 sealed interface AiCellAnalysisUiState {
     data object Idle : AiCellAnalysisUiState
     data object Loading : AiCellAnalysisUiState
@@ -231,6 +248,7 @@ data class ImageCounterState(
     val markers: List<CellPointMarker> = emptyList(),
     val detectedGrid: DetectedNeubauerGrid = DetectedNeubauerGrid(),
     val activeTool: CellMarkerTool = CellMarkerTool.ADD_LIVE,
+    val selectedAiModel: AiModelOption = AiModelOption.GEMINI_4_ARGON,
     val showGridOverlay: Boolean = true,
     val showFullScreenEditor: Boolean = false,
     val dilutionFactorText: String = "2",

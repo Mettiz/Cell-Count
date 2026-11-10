@@ -90,6 +90,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.model.AiCellAnalysisUiState
+import com.example.model.AiModelOption
 import com.example.model.CellMarkerTool
 import com.example.model.CellPointMarker
 import com.example.model.CountUnitMultiplier
@@ -119,6 +120,7 @@ import androidx.compose.ui.window.DialogProperties
 fun ImageCellCounterScreen(
     state: ImageCounterState,
     onSelectTool: (CellMarkerTool) -> Unit,
+    onSelectAiModel: (AiModelOption) -> Unit = {},
     onToggleGrid: () -> Unit,
     onOpenFullScreenEditor: () -> Unit = {},
     onCloseFullScreenEditor: () -> Unit = {},
@@ -496,6 +498,48 @@ fun ImageCellCounterScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("عکس با دوربین", fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // AI Engine Selector Row (Gemini 4 Argon / Gemini 3.8 Flash)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "مدل هوش مصنوعی:",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    AiModelOption.entries.forEach { modelOption ->
+                        FilterChip(
+                            selected = state.selectedAiModel == modelOption,
+                            onClick = {
+                                onSelectAiModel(modelOption)
+                                selectedBitmap?.let { bmp ->
+                                    onAnalyzeBitmapWithAi(bmp, "آنالیز با ${modelOption.shortBadge}")
+                                }
+                            },
+                            label = {
+                                Text(
+                                    text = modelOption.displayName,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Filled.AutoAwesome,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            modifier = Modifier.testTag("ai_model_chip_${modelOption.name}")
+                        )
                     }
                 }
 
