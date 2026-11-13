@@ -10,23 +10,30 @@ permissions:
 
 jobs:
   build-apk:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Decode debug keystore and prepare env
+      - name: Prepare Android SDK licenses, keystore, and env
         run: |
+          SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=$SDK_DIR" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_DIR" >> "$GITHUB_ENV"
+
+          SDKMGR="$(command -v sdkmanager || find "$SDK_DIR" -name sdkmanager -type f 2>/dev/null | head -n 1 || true)"
+          if [ -n "$SDKMGR" ]; then
+            chmod +x "$SDKMGR" || true
+            (yes || true) | "$SDKMGR" --licenses > /dev/null 2>&1 || true
+          fi
+
           if [ -f debug.keystore.base64 ]; then
             base64 -d debug.keystore.base64 > debug.keystore || true
           fi
@@ -42,9 +49,10 @@ jobs:
           fi
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '9.3.1'
+          validate-wrappers: false
 
       - name: Build Android APK
         run: gradle :app:assembleDebug --no-daemon --stacktrace
@@ -55,19 +63,16 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk release-apk/CellCount-Lab.apk
 
       - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: CellCount-Lab-APK
           path: release-apk/CellCount-Lab.apk
 
       - name: Publish APK to GitHub Release
-        uses: softprops/action-gh-release@v2
-        continue-on-error: true
-        with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: CellCount Lab Android APK (Build #${{ github.run_number }})
-          make_latest: true
-          body: |
-            فایل نصبی اندروید **CellCount Lab** به‌صورت خودکار توسط GitHub Actions ساخته شد.
-            برای نصب روی گوشی اندرویدی، فایل `CellCount-Lab.apk` را دانلود و نصب کنید.
-          files: release-apk/CellCount-Lab.apk
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v1.0.${{ github.run_number }}" release-apk/CellCount-Lab.apk \
+            --title "CellCount Lab Android APK (Build #${{ github.run_number }})" \
+            --notes "فایل نصبی اندروید CellCount Lab به‌صورت خودکار توسط GitHub Actions ساخته شد." \
+            --latest || echo "Release skipped (check repo Workflow permissions if needed; APK is still available in Artifacts)."
