@@ -26,7 +26,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MergeType
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.automirrored.outlined.MergeType
+import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material.icons.filled.Biotech
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.DarkMode
@@ -66,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.model.AppTab
+import com.example.ui.screens.CellGrowthPredictorScreen
 import com.example.ui.screens.CellMixerScreen
 import com.example.ui.screens.DilutionSerumScreen
 import com.example.ui.screens.ImageCellCounterScreen
@@ -163,6 +166,7 @@ fun CellCountLabApp(
     val imageCounterState by viewModel.imageCounterState.collectAsStateWithLifecycle()
     val neubauerState by viewModel.neubauerState.collectAsStateWithLifecycle()
     val seedingState by viewModel.seedingState.collectAsStateWithLifecycle()
+    val growthState by viewModel.growthState.collectAsStateWithLifecycle()
     val savedRecords by viewModel.savedRecords.collectAsStateWithLifecycle()
     var showPlayDescDialog by remember { mutableStateOf(false) }
 
@@ -361,6 +365,29 @@ fun CellCountLabApp(
                 )
 
                 NavigationBarItem(
+                    selected = selectedTab == AppTab.GROWTH_PREDICTOR,
+                    onClick = { viewModel.selectTab(AppTab.GROWTH_PREDICTOR) },
+                    icon = {
+                        Icon(
+                            imageVector = if (selectedTab == AppTab.GROWTH_PREDICTOR) {
+                                Icons.AutoMirrored.Filled.TrendingUp
+                            } else {
+                                Icons.AutoMirrored.Outlined.TrendingUp
+                            },
+                            contentDescription = stringResource(R.string.tab_growth)
+                        )
+                    },
+                    label = {
+                        Text(
+                            text = stringResource(R.string.tab_growth),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    modifier = Modifier.testTag("nav_tab_growth")
+                )
+
+                NavigationBarItem(
                     selected = selectedTab == AppTab.SEEDING_AND_HISTORY,
                     onClick = { viewModel.selectTab(AppTab.SEEDING_AND_HISTORY) },
                     icon = {
@@ -433,7 +460,9 @@ fun CellCountLabApp(
                             ImageCellCounterScreen(
                                 state = imageCounterState,
                                 onSelectTool = viewModel::selectImageMarkerTool,
+                                onSelectCountingEngine = viewModel::selectCountingEngineMode,
                                 onSelectAiModel = viewModel::selectAiModel,
+                                onToggleDeepQuadrantScan = viewModel::toggleDeepQuadrantScan,
                                 onToggleGrid = viewModel::toggleImageGridOverlay,
                                 onOpenFullScreenEditor = viewModel::openFullScreenImageEditor,
                                 onCloseFullScreenEditor = viewModel::closeFullScreenImageEditor,
@@ -444,7 +473,7 @@ fun CellCountLabApp(
                                 onSensitivityChange = viewModel::updateImageSensitivity,
                                 onMarkerScaleChange = viewModel::updateImageMarkerScale,
                                 onAnalyzeBitmap = viewModel::autoDetectCellsFromImage,
-                                onAnalyzeBitmapWithAi = viewModel::analyzeBitmapWithGeminiAi,
+                                onAnalyzeBitmapWithAi = viewModel::analyzeSlideWithSelectedEngine,
                                 onDilutionChange = viewModel::updateImageDilutionFactor,
                                 onSquaresCountChange = viewModel::updateImageSquaresCount,
                                 onChamberFactorChange = viewModel::updateImageChamberFactor,
@@ -492,6 +521,29 @@ fun CellCountLabApp(
                             )
                         }
 
+                        AppTab.GROWTH_PREDICTOR -> {
+                            CellGrowthPredictorScreen(
+                                state = growthState,
+                                onSelectVessel = viewModel::selectGrowthVesselPreset,
+                                onSelectCellLine = viewModel::selectGrowthCellLinePreset,
+                                onInitialCellsChanged = viewModel::updateGrowthInitialCells,
+                                onToggleInitialCellsUnit = viewModel::toggleGrowthInitialCellsUnit,
+                                onCarryingCapacityChanged = viewModel::updateGrowthCarryingCapacity,
+                                onToggleCarryingCapacityUnit = viewModel::toggleGrowthCarryingCapacityUnit,
+                                onDoublingTimeChanged = viewModel::updateGrowthDoublingTime,
+                                onLagPhaseChanged = viewModel::updateGrowthLagPhase,
+                                onIncubationHoursChanged = viewModel::updateGrowthIncubationHours,
+                                onTargetConfluencyChanged = viewModel::updateGrowthTargetConfluency,
+                                onToggleResultCountUnit = viewModel::toggleGrowthResultCountUnit,
+                                onEmpiricalN1Changed = viewModel::updateEmpiricalN1,
+                                onEmpiricalN2Changed = viewModel::updateEmpiricalN2,
+                                onEmpiricalElapsedHoursChanged = viewModel::updateEmpiricalElapsedHours,
+                                onToggleEmpiricalCountUnit = viewModel::toggleEmpiricalCountUnit,
+                                onApplyEmpiricalDoublingTime = viewModel::applyEmpiricalDoublingTimeToPredictor,
+                                onSavePredictionToHistory = viewModel::saveGrowthPredictionToHistory
+                            )
+                        }
+
                         AppTab.SEEDING_AND_HISTORY -> {
                             SeedingAndHistoryScreen(
                                 seedingState = seedingState,
@@ -506,7 +558,8 @@ fun CellCountLabApp(
                                 onToggleStockCountUnit = viewModel::toggleSeedingStockCountUnit,
                                 onSerumPercentChanged = viewModel::updateSeedingSerumPercent,
                                 onOverfillPercentChanged = viewModel::updateSeedingOverfillPercent,
-                                onDeleteRecord = viewModel::deleteSavedRecord
+                                onDeleteRecord = viewModel::deleteSavedRecord,
+                                onOpenGrowthPredictor = viewModel::importSeedingToGrowthPredictor
                             )
                         }
                     }

@@ -16,9 +16,8 @@ android {
     applicationId = "com.aistudio.cellcountlab.kxpqmr"
     minSdk = 24
     targetSdk = 36
-    val autoVersionCode = (((System.currentTimeMillis() / 10_000L) - 170_000_000L).toInt() + 3).coerceAtLeast(9424500)
-    versionCode = autoVersionCode
-    versionName = "$autoVersionCode.0"
+    versionCode = 9435006
+    versionName = "9435006.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -122,6 +121,7 @@ dependencies {
   implementation(libs.firebase.appcheck.debug)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
+  implementation(libs.opencv)
   // implementation(libs.logging.interceptor)
   // implementation(libs.moshi.kotlin)
   // implementation(libs.okhttp)

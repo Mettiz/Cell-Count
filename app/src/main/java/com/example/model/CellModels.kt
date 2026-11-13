@@ -1,6 +1,9 @@
 package com.example.model
 
 import kotlin.math.abs
+import kotlin.math.ln
+import kotlin.math.log2
+import kotlin.math.pow
 import kotlin.math.roundToLong
 
 enum class AppTab {
@@ -8,6 +11,7 @@ enum class AppTab {
     CELL_MIXER,
     IMAGE_COUNTER,
     NEUBAUER_COUNTER,
+    GROWTH_PREDICTOR,
     SEEDING_AND_HISTORY
 }
 
@@ -87,15 +91,15 @@ enum class TargetAnchor {
 }
 
 data class DilutionState(
-    val currentVolumeText: String = "2",
-    val currentCountText: String = "2.5",
-    val targetCountText: String = "0.5",
-    val finalVolumeText: String = "10",
+    val currentVolumeText: String = "",
+    val currentCountText: String = "",
+    val targetCountText: String = "",
+    val finalVolumeText: String = "",
     val serumPercentText: String = "3",
     val initialSerumPercentText: String = "0",
-    val mediaVolumeText: String = "7.76",
-    val serumVolumeText: String = "0.24",
-    val totalAddedVolumeText: String = "8",
+    val mediaVolumeText: String = "",
+    val serumVolumeText: String = "",
+    val totalAddedVolumeText: String = "",
     val v1Unit: VolumeUnit = VolumeUnit.ML,
     val v2Unit: VolumeUnit = VolumeUnit.ML,
     val mediaUnit: VolumeUnit = VolumeUnit.ML,
@@ -156,11 +160,10 @@ data class CellSampleItem(
 
 data class MixerState(
     val samples: List<CellSampleItem> = listOf(
-        CellSampleItem(1, "نمونه سلولی ۱", "3", "2.4", VolumeUnit.ML, CountUnitMultiplier.MILLION),
-        CellSampleItem(2, "نمونه سلولی ۲", "2", "1.2", VolumeUnit.ML, CountUnitMultiplier.MILLION),
-        CellSampleItem(3, "نمونه سلولی ۳", "1.5", "0.8", VolumeUnit.ML, CountUnitMultiplier.MILLION)
+        CellSampleItem(1, "نمونه سلولی ۱", "", "", VolumeUnit.ML, CountUnitMultiplier.MILLION),
+        CellSampleItem(2, "نمونه سلولی ۲", "", "", VolumeUnit.ML, CountUnitMultiplier.MILLION)
     ),
-    val extraMediaVolumeText: String = "0",
+    val extraMediaVolumeText: String = "",
     val extraMediaUnit: VolumeUnit = VolumeUnit.ML,
     val outputVolumeUnit: VolumeUnit = VolumeUnit.ML,
     val unitMultiplier: CountUnitMultiplier = CountUnitMultiplier.MILLION
@@ -189,7 +192,23 @@ data class MixerState(
 enum class CellMarkerTool(val label: String) {
     ADD_LIVE("سلول زنده (+)"),
     ADD_DEAD("سلول مرده (+)"),
-    ERASE("حذف نشانه")
+    ERASE("حذف نشانه"),
+    SAMPLE_TEMPLATE_LIVE("الگوی زنده (لمس ۱ سلول)"),
+    SAMPLE_TEMPLATE_DEAD("الگوی مرده (لمس ۱ سلول)")
+}
+
+enum class CountingEngineMode(
+    val title: String,
+    val shortLabel: String
+) {
+    OPENCV_COUNTTHINGS(
+        title = "موتور آفلاین CountThings (OpenCV • بدون محدودیت)",
+        shortLabel = "CountThings (OpenCV)"
+    ),
+    GEMINI_AI_CLOUD(
+        title = "هوش مصنوعی ابری Gemini (نیازمند سهمیه)",
+        shortLabel = "Gemini AI"
+    )
 }
 
 data class CellPointMarker(
@@ -198,12 +217,13 @@ data class CellPointMarker(
     val normalizedY: Float,
     val isLive: Boolean,
     val isOnGridLine: Boolean = false,
-    val isOverlapping: Boolean = false
+    val isOverlapping: Boolean = false,
+    val confidence: Int = 100
 )
 
 data class DetectedNeubauerGrid(
-    val verticalLines: List<Float> = listOf(0.11f, 0.308f, 0.498f, 0.678f, 0.858f),
-    val horizontalLines: List<Float> = listOf(0.065f, 0.285f, 0.502f, 0.704f, 0.902f),
+    val verticalLines: List<Float> = emptyList(),
+    val horizontalLines: List<Float> = emptyList(),
     val detectedSmallSquares: Int = 16,
     val detectedLargeSquares: Int = 1
 ) {
@@ -215,21 +235,28 @@ enum class AiModelOption(
     val displayName: String,
     val shortBadge: String
 ) {
-    GEMINI_4_ARGON(
-        modelId = "gemini-4-argon",
-        displayName = "Gemini 4 Argon (فوق‌دقیق)",
-        shortBadge = "Gemini 4 Argon"
-    ),
     GEMINI_3_8_FLASH(
         modelId = "gemini-3.8-flash",
-        displayName = "Gemini 3.8 Flash (سریع)",
-        shortBadge = "Gemini 3.8 Flash"
+        displayName = "Gemini 3.8 Flash (دقیق • پیش‌فرض رایگان)",
+        shortBadge = "gemini-3.8-flash"
+    ),
+    GEMINI_4_ARGON(
+        modelId = "gemini-4-argon",
+        displayName = "Gemini 4 Argon (فوق‌دقیق • نیازمند Blaze)",
+        shortBadge = "gemini-4-argon"
+    ),
+    GEMINI_3_5_FLASH_LITE(
+        modelId = "gemini-3.5-flash-lite",
+        displayName = "Gemini 3.5 Flash-Lite (سریع)",
+        shortBadge = "gemini-3.5-flash-lite"
     )
 }
 
 sealed interface AiCellAnalysisUiState {
     data object Idle : AiCellAnalysisUiState
-    data object Loading : AiCellAnalysisUiState
+    data class Loading(
+        val statusText: String = "در حال ارسال تصویر با وضوح بالا به مدل هوش مصنوعی..."
+    ) : AiCellAnalysisUiState
     data class Success(
         val summary: String,
         val liveCount: Int,
@@ -239,25 +266,34 @@ sealed interface AiCellAnalysisUiState {
         val gridLinesDetected: Int = 0,
         val viableConcentrationPerMl: Double = 0.0,
         val totalConcentrationPerMl: Double = 0.0,
-        val viabilityPercent: Double = 0.0
+        val viabilityPercent: Double = 0.0,
+        val grid4x4Live: List<List<Int>> = List(4) { List(4) { 0 } },
+        val grid4x4Dead: List<List<Int>> = List(4) { List(4) { 0 } },
+        val concentrationFormulaPersian: String = "",
+        val executedPythonCode: String = "",
+        val codeExecutionOutput: String = ""
     ) : AiCellAnalysisUiState
     data class Error(val message: String) : AiCellAnalysisUiState
 }
 
 data class ImageCounterState(
     val markers: List<CellPointMarker> = emptyList(),
+    val allAiMarkers: List<CellPointMarker> = emptyList(),
     val detectedGrid: DetectedNeubauerGrid = DetectedNeubauerGrid(),
     val activeTool: CellMarkerTool = CellMarkerTool.ADD_LIVE,
-    val selectedAiModel: AiModelOption = AiModelOption.GEMINI_4_ARGON,
+    val countingEngineMode: CountingEngineMode = CountingEngineMode.OPENCV_COUNTTHINGS,
+    val selectedAiModel: AiModelOption = AiModelOption.GEMINI_3_8_FLASH,
+    val deepQuadrantScanEnabled: Boolean = false,
+    val templateMatchInfo: String = "",
     val showGridOverlay: Boolean = true,
     val showFullScreenEditor: Boolean = false,
     val dilutionFactorText: String = "2",
     val squaresCountText: String = "1",
     val chamberFactorText: String = "10000",
-    val sampleVolumeText: String = "5",
+    val sampleVolumeText: String = "",
     val sampleVolumeUnit: VolumeUnit = VolumeUnit.ML,
     val resultCountUnit: CountUnitMultiplier = CountUnitMultiplier.MILLION,
-    val detectionSensitivity: Float = 0.78f,
+    val detectionSensitivity: Float = 0.62f,
     val markerScale: Float = 0.45f,
     val imageSourceLabel: String = "عکسی انتخاب نشده — از گالری یا دوربین عکس لام را وارد کنید",
     val aiAnalysisState: AiCellAnalysisUiState = AiCellAnalysisUiState.Idle
@@ -267,6 +303,41 @@ data class ImageCounterState(
     val totalCount: Int get() = liveCount + deadCount
     val onGridLineCount: Int get() = markers.count { it.isOnGridLine }
     val overlappingCount: Int get() = markers.count { it.isOverlapping }
+
+    /**
+     * Computes the 4x4 Neubauer sub-square cell counts (Row 0..3 x Col 0..3)
+     * based on the detected grid lines and current cell markers.
+     */
+    fun computeGrid4x4Counts(isLiveFilter: Boolean? = null): List<List<Int>> {
+        val vBounds = if (detectedGrid.verticalLines.size >= 5) {
+            detectedGrid.verticalLines.sorted().take(5)
+        } else {
+            listOf(0.10f, 0.30f, 0.50f, 0.70f, 0.90f)
+        }
+        val hBounds = if (detectedGrid.horizontalLines.size >= 5) {
+            detectedGrid.horizontalLines.sorted().take(5)
+        } else {
+            listOf(0.10f, 0.30f, 0.50f, 0.70f, 0.90f)
+        }
+        val matrix = Array(4) { IntArray(4) }
+        val filtered = if (isLiveFilter == null) markers else markers.filter { it.isLive == isLiveFilter }
+        for (m in filtered) {
+            val col = when {
+                m.normalizedX < vBounds[1] -> 0
+                m.normalizedX < vBounds[2] -> 1
+                m.normalizedX < vBounds[3] -> 2
+                else -> 3
+            }
+            val row = when {
+                m.normalizedY < hBounds[1] -> 0
+                m.normalizedY < hBounds[2] -> 1
+                m.normalizedY < hBounds[3] -> 2
+                else -> 3
+            }
+            matrix[row][col]++
+        }
+        return matrix.map { it.toList() }
+    }
 
     val viabilityPercent: Double
         get() = if (totalCount > 0) (liveCount.toDouble() / totalCount.toDouble()) * 100.0 else 0.0
@@ -353,13 +424,13 @@ data class NeubauerSquare(
 
 data class NeubauerState(
     val squares: List<NeubauerSquare> = listOf(
-        NeubauerSquare(1, "خانه ۱ (بالا راست)", "42", "3"),
-        NeubauerSquare(2, "خانه ۲ (بالا چپ)", "38", "2"),
-        NeubauerSquare(3, "خانه ۳ (پایین راست)", "45", "4"),
-        NeubauerSquare(4, "خانه ۴ (پایین چپ)", "39", "1")
+        NeubauerSquare(1, "خانه ۱ (بالا راست)", "", ""),
+        NeubauerSquare(2, "خانه ۲ (بالا چپ)", "", ""),
+        NeubauerSquare(3, "خانه ۳ (پایین راست)", "", ""),
+        NeubauerSquare(4, "خانه ۴ (پایین چپ)", "", "")
     ),
     val trypanDilutionFactorText: String = "2",
-    val sampleVolumeText: String = "5",
+    val sampleVolumeText: String = "",
     val sampleVolumeUnit: VolumeUnit = VolumeUnit.ML,
     val resultCountUnit: CountUnitMultiplier = CountUnitMultiplier.MILLION,
     val chamberFactor: Double = 10_000.0
@@ -407,33 +478,282 @@ enum class CultureVesselPreset(
     val category: String,
     val defaultMediaPerWellMl: Double,
     val defaultTargetCellsPerWellMillion: Double,
-    val defaultWellCount: Int
+    val defaultWellCount: Int,
+    val surfaceAreaCm2: Double,
+    val maxConfluentCellsMillion: Double
 ) {
-    PLATE_6("پلیت ۶ خانه", "Plate", 2.0, 0.3, 6),
-    PLATE_12("پلیت ۱۲ خانه", "Plate", 1.0, 0.12, 12),
-    PLATE_24("پلیت ۲۴ خانه", "Plate", 0.5, 0.06, 24),
-    PLATE_96("پلیت ۹۶ خانه", "Plate", 0.1, 0.01, 96),
-    FLASK_T25("فلاسک T25", "Flask", 5.0, 0.7, 1),
-    FLASK_T75("فلاسک T75", "Flask", 12.0, 2.1, 1),
-    FLASK_T175("فلاسک T175", "Flask", 25.0, 4.9, 1)
+    PLATE_6("پلیت ۶ خانه", "Plate", 2.0, 0.3, 6, 9.6, 1.2),
+    PLATE_12("پلیت ۱۲ خانه", "Plate", 1.0, 0.12, 12, 3.8, 0.5),
+    PLATE_24("پلیت ۲۴ خانه", "Plate", 0.5, 0.06, 24, 1.9, 0.24),
+    PLATE_96("پلیت ۹۶ خانه", "Plate", 0.1, 0.01, 96, 0.32, 0.04),
+    FLASK_T25("فلاسک T25", "Flask", 5.0, 0.7, 1, 25.0, 2.8),
+    FLASK_T75("فلاسک T75", "Flask", 12.0, 2.1, 1, 75.0, 8.4),
+    FLASK_T175("فلاسک T175", "Flask", 25.0, 4.9, 1, 175.0, 20.0),
+    BIOREACTOR_100L(
+        title = "بیوراکتور ۱۰۰ لیتری",
+        category = "Bioreactor",
+        defaultMediaPerWellMl = 100_000.0,
+        defaultTargetCellsPerWellMillion = 50_000.0,
+        defaultWellCount = 1,
+        surfaceAreaCm2 = 0.0,
+        maxConfluentCellsMillion = 300_000.0
+    ),
+    BIOREACTOR_700L(
+        title = "بیوراکتور ۷۰۰ لیتری",
+        category = "Bioreactor",
+        defaultMediaPerWellMl = 700_000.0,
+        defaultTargetCellsPerWellMillion = 350_000.0,
+        defaultWellCount = 1,
+        surfaceAreaCm2 = 0.0,
+        maxConfluentCellsMillion = 2_100_000.0
+    ),
+    BIOREACTOR_1500L(
+        title = "بیوراکتور ۱۵۰۰ لیتری",
+        category = "Bioreactor",
+        defaultMediaPerWellMl = 1_500_000.0,
+        defaultTargetCellsPerWellMillion = 750_000.0,
+        defaultWellCount = 1,
+        surfaceAreaCm2 = 0.0,
+        maxConfluentCellsMillion = 4_500_000.0
+    ),
+    BIOREACTOR_2700L(
+        title = "بیوراکتور ۲۷۰۰ لیتری",
+        category = "Bioreactor",
+        defaultMediaPerWellMl = 2_700_000.0,
+        defaultTargetCellsPerWellMillion = 1_350_000.0,
+        defaultWellCount = 1,
+        surfaceAreaCm2 = 0.0,
+        maxConfluentCellsMillion = 8_100_000.0
+    );
+
+    val isBioreactor: Boolean
+        get() = category == "Bioreactor"
+
+    val workingVolumeLiters: Double
+        get() = defaultMediaPerWellMl / 1000.0
+
+    val specSubtitle: String
+        get() = if (isBioreactor) {
+            "حجم کاری: ${NumberFormatter.formatWithCommas(workingVolumeLiters, 0)} L"
+        } else {
+            "${NumberFormatter.formatWithCommas(surfaceAreaCm2, 1)} cm²"
+        }
+
+    val chipLabel: String
+        get() = if (isBioreactor) {
+            "${title} (${NumberFormatter.formatWithCommas(workingVolumeLiters, 0)}L)"
+        } else {
+            "${title} (${NumberFormatter.formatClean(maxConfluentCellsMillion, 2)}M)"
+        }
+}
+
+enum class CellLinePreset(
+    val title: String,
+    val shortName: String,
+    val defaultDoublingTimeHours: Double,
+    val defaultLagPhaseHours: Double
+) {
+    BHK21_C13("BHK-21 C-13 (کلیه نوزاد همستر — چسبنده)", "BHK-21 (C-13)", 13.5, 3.0),
+    BHK21_SUSP("BHK-21 Suspension (سوسپانسیون / بیوراکتور)", "BHK-21 (Susp)", 16.0, 2.0),
+    BHK21_CLONE13("BHK-21 Clone 13 (واکسن و ویروس‌شناسی)", "BHK-21 Clone 13", 14.0, 3.0),
+    BHK_BSR_T7("BHK BSR-T7/5 (بیان پلی‌مراز T7)", "BHK BSR-T7/5", 15.0, 3.0),
+    HELA("HeLa (سرطان دهانه رحم)", "HeLa", 24.0, 4.0),
+    HEK293("HEK293 (کلیه جنینی انسان)", "HEK293", 20.0, 4.0),
+    CHO("CHO (تخمدان همستر)", "CHO", 16.0, 3.0),
+    NIH_3T3("NIH-3T3 (فیبروبلاست موش)", "NIH-3T3", 18.0, 4.0),
+    MCF7("MCF-7 (سرطان پستان)", "MCF-7", 29.0, 6.0),
+    JURKAT("Jurkat / K562 (سوسپانسیون)", "Jurkat", 21.0, 2.0),
+    MSC("MSC / فیبروبلاست اولیه", "MSC", 36.0, 6.0),
+    CUSTOM("رده سلولی سفارشی", "سفارشی", 24.0, 4.0)
+}
+
+data class GrowthTimePoint(
+    val hour: Double,
+    val logisticCellsRaw: Double,
+    val exponentialCellsRaw: Double,
+    val confluencyPercent: Double,
+    val doublings: Double
+)
+
+data class CellGrowthState(
+    val selectedVessel: CultureVesselPreset = CultureVesselPreset.FLASK_T25,
+    val selectedCellLine: CellLinePreset = CellLinePreset.HELA,
+    val initialCellsText: String = "",
+    val initialCellsUnit: CountUnitMultiplier = CountUnitMultiplier.MILLION,
+    val carryingCapacityText: String = "",
+    val carryingCapacityUnit: CountUnitMultiplier = CountUnitMultiplier.MILLION,
+    val doublingTimeHoursText: String = "24",
+    val lagPhaseHoursText: String = "4",
+    val incubationHoursText: String = "48",
+    val targetConfluencyPercentText: String = "80",
+    val resultCountUnit: CountUnitMultiplier = CountUnitMultiplier.MILLION,
+    // Empirical doubling time calculator fields (from two lab counts N1 -> N2)
+    val empiricalN1Text: String = "",
+    val empiricalN2Text: String = "",
+    val empiricalElapsedHoursText: String = "36",
+    val empiricalCountUnit: CountUnitMultiplier = CountUnitMultiplier.MILLION
+) {
+    val initialCellsRaw: Double
+        get() = initialCellsUnit.toRaw(NumberFormatter.parseInput(initialCellsText)).coerceAtLeast(0.0)
+
+    val carryingCapacityRaw: Double
+        get() = carryingCapacityUnit.toRaw(NumberFormatter.parseInput(carryingCapacityText)).coerceAtLeast(0.0)
+
+    val doublingTimeHours: Double
+        get() = NumberFormatter.parseInput(doublingTimeHoursText).coerceAtLeast(1.0)
+
+    val lagPhaseHours: Double
+        get() = NumberFormatter.parseInput(lagPhaseHoursText).coerceIn(0.0, 120.0)
+
+    val incubationHours: Double
+        get() = NumberFormatter.parseInput(incubationHoursText).coerceIn(0.0, 720.0)
+
+    val targetConfluencyPercent: Double
+        get() = NumberFormatter.parseInput(targetConfluencyPercentText).coerceIn(5.0, 99.5)
+
+    val effectiveGrowthHours: Double
+        get() = (incubationHours - lagPhaseHours).coerceAtLeast(0.0)
+
+    val specificGrowthRatePerHour: Double
+        get() = ln(2.0) / doublingTimeHours
+
+    val initialConfluencyPercent: Double
+        get() = if (carryingCapacityRaw <= 0.0) 0.0 else ((initialCellsRaw / carryingCapacityRaw) * 100.0).coerceIn(0.0, 100.0)
+
+    fun computeExponentialCellsAt(hour: Double): Double {
+        if (initialCellsRaw <= 0.0) return 0.0
+        val tEff = (hour - lagPhaseHours).coerceAtLeast(0.0)
+        return initialCellsRaw * 2.0.pow(tEff / doublingTimeHours)
+    }
+
+    fun computeLogisticCellsAt(hour: Double): Double {
+        val n0 = initialCellsRaw
+        val k = carryingCapacityRaw
+        if (n0 <= 0.0) return 0.0
+        if (k <= 0.0) return computeExponentialCellsAt(hour)
+        if (n0 >= k) return k
+        val tEff = (hour - lagPhaseHours).coerceAtLeast(0.0)
+        val ratio = (k - n0) / n0
+        return k / (1.0 + ratio * 2.0.pow(-tEff / doublingTimeHours))
+    }
+
+    fun computeConfluencyAt(hour: Double): Double {
+        if (carryingCapacityRaw <= 0.0) return 0.0
+        val nLog = computeLogisticCellsAt(hour)
+        return ((nLog / carryingCapacityRaw) * 100.0).coerceIn(0.0, 100.0)
+    }
+
+    val predictedExponentialCellsRaw: Double
+        get() = computeExponentialCellsAt(incubationHours)
+
+    val predictedLogisticCellsRaw: Double
+        get() = computeLogisticCellsAt(incubationHours)
+
+    val predictedConfluencyPercent: Double
+        get() = computeConfluencyAt(incubationHours)
+
+    val populationDoublingLevel: Double
+        get() = if (initialCellsRaw > 0.0 && predictedLogisticCellsRaw > initialCellsRaw) {
+            log2(predictedLogisticCellsRaw / initialCellsRaw)
+        } else 0.0
+
+    val exponentialDoublingLevel: Double
+        get() = effectiveGrowthHours / doublingTimeHours
+
+    val targetPassageCellsRaw: Double
+        get() = carryingCapacityRaw * (targetConfluencyPercent / 100.0)
+
+    /**
+     * Exact hours required to reach targetConfluencyPercent using realistic Logistic Growth
+     */
+    val hoursToTargetConfluencyLogistic: Double
+        get() {
+            val n0 = initialCellsRaw
+            val k = carryingCapacityRaw
+            val nTarget = targetPassageCellsRaw
+            if (n0 >= nTarget) return 0.0
+            val denom = n0 * (k - nTarget)
+            if (denom <= 0.0) return 0.0
+            val arg = (nTarget * (k - n0)) / denom
+            if (arg <= 1.0) return 0.0
+            return lagPhaseHours + doublingTimeHours * log2(arg)
+        }
+
+    /**
+     * Hours required to reach targetConfluencyPercent under pure Exponential Growth
+     */
+    val hoursToTargetConfluencyExponential: Double
+        get() {
+            val n0 = initialCellsRaw
+            val nTarget = targetPassageCellsRaw
+            if (n0 >= nTarget || n0 <= 0.0) return 0.0
+            return lagPhaseHours + doublingTimeHours * log2(nTarget / n0)
+        }
+
+    val scheduleHours: List<Double>
+        get() = listOf(0.0, 12.0, 24.0, 36.0, 48.0, 72.0, 96.0, 120.0)
+
+    val growthSchedulePoints: List<GrowthTimePoint>
+        get() = scheduleHours.map { h ->
+            val logCells = computeLogisticCellsAt(h)
+            val expCells = computeExponentialCellsAt(h)
+            val conf = computeConfluencyAt(h)
+            val pdl = if (initialCellsRaw > 0.0 && logCells > initialCellsRaw) {
+                log2(logCells / initialCellsRaw)
+            } else 0.0
+            GrowthTimePoint(
+                hour = h,
+                logisticCellsRaw = logCells,
+                exponentialCellsRaw = expCells,
+                confluencyPercent = conf,
+                doublings = pdl
+            )
+        }
+
+    // Empirical Doubling Time from two consecutive counts N1 and N2
+    val empiricalN1Raw: Double
+        get() = empiricalCountUnit.toRaw(NumberFormatter.parseInput(empiricalN1Text))
+
+    val empiricalN2Raw: Double
+        get() = empiricalCountUnit.toRaw(NumberFormatter.parseInput(empiricalN2Text))
+
+    val empiricalElapsedHours: Double
+        get() = NumberFormatter.parseInput(empiricalElapsedHoursText)
+
+    val calculatedEmpiricalDoublingTimeHours: Double
+        get() {
+            val n1 = empiricalN1Raw
+            val n2 = empiricalN2Raw
+            val dt = empiricalElapsedHours
+            if (n1 <= 0.0 || n2 <= n1 || dt <= 0.0) return 0.0
+            return (dt * ln(2.0)) / ln(n2 / n1)
+        }
+
+    val calculatedEmpiricalDoublings: Double
+        get() {
+            val n1 = empiricalN1Raw
+            val n2 = empiricalN2Raw
+            if (n1 <= 0.0 || n2 <= n1) return 0.0
+            return log2(n2 / n1)
+        }
 }
 
 data class SeedingState(
     val selectedPreset: CultureVesselPreset = CultureVesselPreset.PLATE_6,
     val wellCountText: String = "6",
-    val volumePerWellText: String = "2",
+    val volumePerWellText: String = "",
     val volumePerWellUnit: VolumeUnit = VolumeUnit.ML,
-    val targetCellsPerWellText: String = "0.3",
+    val targetCellsPerWellText: String = "",
     val targetCellsPerWellUnit: CountUnitMultiplier = CountUnitMultiplier.MILLION,
-    val stockCountText: String = "2.5",
+    val stockCountText: String = "",
     val stockCountUnit: CountUnitMultiplier = CountUnitMultiplier.MILLION,
     val serumPercentText: String = "10",
     val overfillPercentText: String = "10"
 ) {
     val wellCount: Double get() = NumberFormatter.parseInput(wellCountText).coerceAtLeast(1.0)
-    val volumePerWellMl: Double get() = volumePerWellUnit.toMl(NumberFormatter.parseInput(volumePerWellText).coerceAtLeast(0.0001))
-    val targetCellsPerWellRaw: Double get() = targetCellsPerWellUnit.toRaw(NumberFormatter.parseInput(targetCellsPerWellText).coerceAtLeast(0.0001))
-    val stockCountRawPerMl: Double get() = stockCountUnit.toRaw(NumberFormatter.parseInput(stockCountText).coerceAtLeast(0.0001))
+    val volumePerWellMl: Double get() = volumePerWellUnit.toMl(NumberFormatter.parseInput(volumePerWellText).coerceAtLeast(0.0))
+    val targetCellsPerWellRaw: Double get() = targetCellsPerWellUnit.toRaw(NumberFormatter.parseInput(targetCellsPerWellText).coerceAtLeast(0.0))
+    val stockCountRawPerMl: Double get() = stockCountUnit.toRaw(NumberFormatter.parseInput(stockCountText).coerceAtLeast(0.0))
     val serumPercent: Double get() = NumberFormatter.parseInput(serumPercentText).coerceIn(0.0, 100.0)
     val overfillPercent: Double get() = NumberFormatter.parseInput(overfillPercentText).coerceIn(0.0, 100.0)
 

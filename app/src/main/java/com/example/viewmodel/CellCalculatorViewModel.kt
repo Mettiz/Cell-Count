@@ -1,18 +1,21 @@
 package com.example.viewmodel
 
 import android.graphics.Bitmap
-import android.graphics.Color as AndroidColor
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.cv.CountThingsOpenCvEngine
 import com.example.model.ActiveEditedField
 import com.example.model.AiCellAnalysisUiState
 import com.example.model.AiModelOption
 import com.example.model.AppTab
+import com.example.model.CellGrowthState
+import com.example.model.CellLinePreset
 import com.example.model.CellMarkerTool
 import com.example.model.CellPointMarker
 import com.example.model.CellSampleItem
 import com.example.model.CountUnitMultiplier
+import com.example.model.CountingEngineMode
 import com.example.model.CultureVesselPreset
 import com.example.model.DetectedNeubauerGrid
 import com.example.model.DilutionState
@@ -27,6 +30,7 @@ import com.example.model.StockUsageMode
 import com.example.model.TargetAnchor
 import com.example.model.VolumeUnit
 import com.google.firebase.Firebase
+import com.google.firebase.ai.GenerativeModel
 import com.google.firebase.ai.ai
 import com.google.firebase.ai.type.Schema
 import com.google.firebase.ai.type.content
@@ -36,6 +40,7 @@ import kotlin.math.hypot
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -49,77 +54,212 @@ private const val TAG = "CellCalculatorVM"
 
 class CellCalculatorViewModel : ViewModel() {
 
-    private data class DetectedCellCandidate(
-        val normalizedX: Float,
-        val normalizedY: Float,
-        val blobScore: Float,
-        val viabilityScore: Float,
-        val defaultIsLive: Boolean,
-        val isOnGridLine: Boolean = false,
-        val isOverlapping: Boolean = false
+    private data class SlideContextCalibration(
+        val microscopyMode: String,
+        val liveCellSignature: String,
+        val deadCellSignature: String,
+        val artifactsToIgnore: String,
+        val detectedGrid: DetectedNeubauerGrid,
+        val analysisSummary: String
     )
 
-    private data class FullSlideAnalysisResult(
-        val candidates: List<DetectedCellCandidate>,
-        val detectedGrid: DetectedNeubauerGrid
+    private data class QuadrantRoi(
+        val index: Int,
+        val label: String,
+        val xStart: Float,
+        val xEnd: Float,
+        val yStart: Float,
+        val yEnd: Float
+    )
+
+    private data class QuadrantDetectedCell(
+        val quadrantIndex: Int,
+        val normalizedX: Float,
+        val normalizedY: Float,
+        val isLive: Boolean,
+        val onGridLine: Boolean,
+        val isOverlapping: Boolean,
+        val confidence: Int,
+        val interiorScore: Float
+    )
+
+    private val aiSlideContextAndGridSchema = Schema.obj(
+        properties = mapOf(
+            "microscopyMode" to Schema.string(description = "Microscopy mode and staining visible, e.g. phase-contrast / brightfield Trypan Blue"),
+            "liveCellVisualSignature" to Schema.string(description = "Visual signature of genuine LIVE cells in this slide (bright refractile center, thin dark membrane halo, diameter)"),
+            "deadCellVisualSignature" to Schema.string(description = "Visual signature of genuine DEAD cells in this slide (dark blue/purple stained or dark solid cell body)"),
+            "artifactsToIgnore" to Schema.string(description = "Non-cell artifacts present in this slide to exclude (grid intersections, scratches, dust fibers, bubbles, dark corners)"),
+            "verticalGridLines" to Schema.array(
+                items = Schema.integer(),
+                description = "Sorted normalized X coordinates (0..1000) of the primary vertical Neubauer grid lines"
+            ),
+            "horizontalGridLines" to Schema.array(
+                items = Schema.integer(),
+                description = "Sorted normalized Y coordinates (0..1000) of the primary horizontal Neubauer grid lines"
+            ),
+            "detectedSquaresCount" to Schema.integer(description = "Number of main 4x4 Neubauer squares visible (typically 1)"),
+            "analysisSummary" to Schema.string(description = "Concise Persian explanation of slide clarity, cell appearance, and grid quality")
+        ),
+        optionalProperties = listOf("verticalGridLines", "horizontalGridLines", "detectedSquaresCount")
     )
 
     private val aiCellItemSchema = Schema.obj(
         properties = mapOf(
-            "x" to Schema.integer(description = "Normalized X coordinate from 0 to 1000 on the original image"),
-            "y" to Schema.integer(description = "Normalized Y coordinate from 0 to 1000 on the original image"),
-            "isLive" to Schema.boolean(description = "true if live (viable, bright refractile center), false if dead (dark/Trypan-blue stained)"),
-            "onGridLine" to Schema.boolean(description = "true if this cell is sitting on or touching a Neubauer grid line"),
-            "isOverlapping" to Schema.boolean(description = "true if this cell is part of an overlapping/touching doublet or cluster")
+            "x" to Schema.integer(description = "Exact normalized X coordinate (0..1000) of the cell center in THIS image"),
+            "y" to Schema.integer(description = "Exact normalized Y coordinate (0..1000) of the cell center in THIS image"),
+            "isLive" to Schema.boolean(description = "true if LIVE cell (bright/refractile core or unstained intact cell), false if DEAD (dark/Trypan-blue stained)"),
+            "onGridLine" to Schema.boolean(description = "true if cell is sitting on or touching a Neubauer grid line"),
+            "isOverlapping" to Schema.boolean(description = "true if cell is touching or overlapping another cell in a doublet or cluster"),
+            "confidence" to Schema.integer(description = "Confidence 1..100 that this mark is a genuine biological cell and NOT an artifact")
         )
     )
 
     private val aiCellDetectionSchema = Schema.obj(
         properties = mapOf(
-            "liveCount" to Schema.integer(description = "Total number of live (viable, bright/refractile, unstained) cells directly detected in the image"),
-            "deadCount" to Schema.integer(description = "Total number of dead (non-viable, Trypan-blue stained or dark/lysed) cells directly detected in the image"),
-            "onGridLineCount" to Schema.integer(description = "Number of cells located on or touching the Neubauer grid lines"),
-            "overlappingCellCount" to Schema.integer(description = "Number of individual cells resolved inside overlapping or touching cell clusters/doublets"),
-            "detectedSquaresCount" to Schema.integer(description = "Number of large Neubauer counting squares visible in the image (typically 1)"),
-            "brightCenterLive" to Schema.boolean(description = "true if live cells have bright refractile centers/halos, false if inverted contrast"),
-            "verticalGridLines" to Schema.array(
-                items = Schema.integer(),
-                description = "Normalized X coordinates (0..1000) of vertical Neubauer grid lines detected in the image"
-            ),
-            "horizontalGridLines" to Schema.array(
-                items = Schema.integer(),
-                description = "Normalized Y coordinates (0..1000) of horizontal Neubauer grid lines detected in the image"
-            ),
             "detectedCells" to Schema.array(
                 items = aiCellItemSchema,
-                description = "List of cells directly localized from the original microscope image"
+                description = "All genuine biological cells localized in THIS image"
             ),
-            "analysisSummary" to Schema.string(description = "Comprehensive Persian explanation of the full image analysis: live cells, dead cells, Neubauer grid lines, cells on grid lines, overlapping cells, and final cell count")
+            "regionNotes" to Schema.string(description = "Brief Persian summary of density, clusters, and excluded artifacts")
         ),
-        optionalProperties = listOf("verticalGridLines", "horizontalGridLines", "detectedCells", "detectedSquaresCount")
+        optionalProperties = listOf("regionNotes")
     )
 
-    private val aiCellDetectionConfig by lazy {
-        generationConfig {
-            responseMimeType = "application/json"
-            responseSchema = aiCellDetectionSchema
-            temperature = 0.1f
-            maxOutputTokens = 4096
+    private val stage1ContextSystemInstruction by lazy {
+        content {
+            text(
+                """
+                You are an expert hemocytometer cytopathology vision analyst inspecting a Neubauer microscope slide image.
+                Perform ONLY global slide calibration and Neubauer grid line localization:
+                1. Describe the exact appearance of LIVE viable cells vs DEAD (Trypan Blue stained / dark) cells in this specific image.
+                2. Explicitly list non-cell artifacts present in this image so they are never counted:
+                   - Bare Neubauer grid line intersections / bright cross junctions
+                   - Elongated fibers, glass scratches, irregular debris, dust specks
+                   - Hollow air bubbles with thick flat black rings and glare centers
+                   - Dark circular ocular vignette corners outside the lit field
+                3. Locate the normalized coordinates (0..1000) of the primary vertical and horizontal Neubauer grid lines. Include each multi-line triple-etched border once at its center line.
+                4. Write analysisSummary in clear, accurate Persian.
+                """.trimIndent()
+            )
         }
     }
 
-    private val geminiArgonModel by lazy {
-        Firebase.ai.generativeModel(
-            modelName = "gemini-4-argon",
-            generationConfig = aiCellDetectionConfig
+    private val stage2DetectionSystemInstruction by lazy {
+        content {
+            text(
+                """
+                You are an ultra-high-precision microscope cell localization model.
+                Your sole task is to output the exact normalized center (x, y in 0..1000) of EVERY genuine biological cell in the provided image, while strictly rejecting all non-cell artifacts.
+
+                STRICT RULES:
+                1. MARK EVERY REAL CELL:
+                   - Live cells (bright/refractile round center with circular membrane halo) -> isLive = true.
+                   - Dead cells (dark Trypan-blue/purple stained or dark solid cell bodies) -> isLive = false.
+                   - Include faint/slightly soft real cells that clearly have a round/ovoid cell membrane.
+                   - Include real cells sitting directly ON a grid line (onGridLine = true).
+                   - For touching/overlapping doublets or clusters, output a SEPARATE (x, y) point at the center of EACH individual cell in the cluster (isOverlapping = true).
+                2. NEVER MARK NON-CELL ARTIFACTS (ZERO FALSE POSITIVES):
+                   - NEVER mark empty intersections where horizontal and vertical grid lines cross!
+                   - NEVER mark bare bright/white grid lines, scratches, fibers, irregular dirt/lint, or empty background noise.
+                   - NEVER mark anything inside black ocular vignette corners outside the illuminated slide field.
+                   - NEVER mark air bubbles (thick flat dark ring with hollow white center and no cell interior).
+                3. CONFIDENCE CALIBRATION (1..100):
+                   - 85..100: Unmistakable, crisp live or dead biological cell.
+                   - 65..84: Valid biological cell that is fainter, slightly out-of-focus, on a grid line, or part of an overlapping cluster.
+                   - 35..64: Uncertain / very faint spot that may be either a faint cell or glass debris.
+                   - Below 35: Do not include unless doubtful edge case.
+                """.trimIndent()
+            )
+        }
+    }
+
+    private fun createStructuredJsonModel(
+        modelId: String,
+        schema: Schema,
+        sysInstruction: com.google.firebase.ai.type.Content
+    ): GenerativeModel {
+        return Firebase.ai.generativeModel(
+            modelName = modelId,
+            generationConfig = generationConfig {
+                temperature = 0.0f
+                maxOutputTokens = 16384
+                responseMimeType = "application/json"
+                responseSchema = schema
+            },
+            systemInstruction = sysInstruction
         )
     }
 
-    private val gemini38FlashModel by lazy {
-        Firebase.ai.generativeModel(
-            modelName = "gemini-3.8-flash",
-            generationConfig = aiCellDetectionConfig
-        )
+    private val aiUnifiedSlideAnalysisSchema = Schema.obj(
+        properties = mapOf(
+            "microscopyMode" to Schema.string(description = "Microscopy mode and staining visible, e.g. phase-contrast / brightfield Trypan Blue"),
+            "liveCellVisualSignature" to Schema.string(description = "Visual signature of genuine LIVE cells in this slide (bright refractile center, thin dark membrane halo)"),
+            "deadCellVisualSignature" to Schema.string(description = "Visual signature of genuine DEAD cells in this slide (dark blue/purple stained or dark solid cell body)"),
+            "artifactsToIgnore" to Schema.string(description = "Non-cell artifacts excluded in this slide (grid intersections, scratches, dust fibers, bubbles, dark corners)"),
+            "verticalGridLines" to Schema.array(
+                items = Schema.integer(),
+                description = "Sorted normalized X coordinates (0..1000) of primary vertical Neubauer grid lines"
+            ),
+            "horizontalGridLines" to Schema.array(
+                items = Schema.integer(),
+                description = "Sorted normalized Y coordinates (0..1000) of primary horizontal Neubauer grid lines"
+            ),
+            "detectedSquaresCount" to Schema.integer(description = "Number of main 4x4 Neubauer squares visible (typically 1)"),
+            "detectedCells" to Schema.array(
+                items = aiCellItemSchema,
+                description = "All genuine biological cells localized in this full slide image"
+            ),
+            "analysisSummary" to Schema.string(description = "Concise Persian summary describing slide quality, live/dead cells, and artifact exclusion")
+        ),
+        optionalProperties = listOf("verticalGridLines", "horizontalGridLines", "detectedSquaresCount")
+    )
+
+    private val unifiedSlideSystemInstruction by lazy {
+        content {
+            text(
+                """
+                You are an expert hemocytometer cytopathology vision analyst inspecting a Neubauer microscope slide image.
+                Perform full slide calibration, grid line localization, and high-precision cell center localization in ONE pass.
+
+                STRICT RULES:
+                1. MARK EVERY REAL CELL IN detectedCells (x, y in 0..1000):
+                   - Live cells (bright/refractile round center with circular membrane halo) -> isLive = true.
+                   - Dead cells (dark Trypan-blue/purple stained or dark solid cell bodies) -> isLive = false.
+                   - Include faint/slightly soft real cells that clearly have a round/ovoid cell membrane.
+                   - Include real cells sitting directly ON a grid line (onGridLine = true).
+                   - For touching/overlapping doublets or clusters, output a SEPARATE (x, y) point at the center of EACH individual cell in the cluster (isOverlapping = true).
+                2. NEVER MARK NON-CELL ARTIFACTS (ZERO FALSE POSITIVES):
+                   - NEVER mark empty intersections where horizontal and vertical grid lines cross!
+                   - NEVER mark bare bright/white grid lines, scratches, fibers, irregular dirt/lint, or empty background noise.
+                   - NEVER mark anything inside black ocular vignette corners outside the illuminated slide field.
+                   - NEVER mark air bubbles (thick flat dark ring with hollow white center and no cell interior).
+                3. CONFIDENCE CALIBRATION (1..100):
+                   - 85..100: Unmistakable, crisp live or dead biological cell.
+                   - 65..84: Valid biological cell that is fainter, slightly out-of-focus, on a grid line, or part of an overlapping cluster.
+                   - 35..64: Uncertain / very faint spot that may be either a faint cell or glass debris.
+                   - Below 35: Do not include unless doubtful edge case.
+                4. Locate normalized coordinates (0..1000) of the primary vertical and horizontal Neubauer grid lines (include each multi-line border once at its center line) and write analysisSummary in clear, accurate Persian.
+                """.trimIndent()
+            )
+        }
+    }
+
+    private val stage1ModelsByOption: Map<AiModelOption, GenerativeModel> by lazy {
+        AiModelOption.entries.associateWith { opt ->
+            createStructuredJsonModel(opt.modelId, aiSlideContextAndGridSchema, stage1ContextSystemInstruction)
+        }
+    }
+
+    private val stage2ModelsByOption: Map<AiModelOption, GenerativeModel> by lazy {
+        AiModelOption.entries.associateWith { opt ->
+            createStructuredJsonModel(opt.modelId, aiCellDetectionSchema, stage2DetectionSystemInstruction)
+        }
+    }
+
+    private val unifiedModelsByOption: Map<AiModelOption, GenerativeModel> by lazy {
+        AiModelOption.entries.associateWith { opt ->
+            createStructuredJsonModel(opt.modelId, aiUnifiedSlideAnalysisSchema, unifiedSlideSystemInstruction)
+        }
     }
 
     private val _isDarkMode = MutableStateFlow(false)
@@ -143,21 +283,14 @@ class CellCalculatorViewModel : ViewModel() {
     private val _seedingState = MutableStateFlow(SeedingState())
     val seedingState: StateFlow<SeedingState> = _seedingState.asStateFlow()
 
-    private val _savedRecords = MutableStateFlow(
-        listOf(
-            SavedCalculationRecord(
-                id = 1L,
-                title = "رقت سلول با ۳٪ سرم (نمونه پیش‌فرض)",
-                summary = "V₁: 2 mL (کانت 2.5 میلیون) ⟵ V₂: 10 mL (کانت تارگت 0.5 میلیون)",
-                details = "مدیا پایه: 7.76 mL (0.00776 L) | سرم (۳٪): 0.24 mL (0.00024 L)",
-                timestampLabel = "آماده در آزمایشگاه"
-            )
-        )
-    )
+    private val _growthState = MutableStateFlow(CellGrowthState())
+    val growthState: StateFlow<CellGrowthState> = _growthState.asStateFlow()
+
+    private val _savedRecords = MutableStateFlow<List<SavedCalculationRecord>>(emptyList())
     val savedRecords: StateFlow<List<SavedCalculationRecord>> = _savedRecords.asStateFlow()
 
-    private var nextSampleId = 4
-    private var nextRecordId = 2L
+    private var nextSampleId = 3
+    private var nextRecordId = 1L
     private var nextMarkerId = 100L
 
     fun toggleDarkMode() {
@@ -624,13 +757,12 @@ class CellCalculatorViewModel : ViewModel() {
         val id = nextSampleId++
         _mixerState.update { state ->
             val newIndex = state.samples.size + 1
-            val defaultCountStr = if (state.unitMultiplier == CountUnitMultiplier.MILLION) "1" else "1000000"
             state.copy(
                 samples = state.samples + CellSampleItem(
                     id = id,
                     label = "نمونه سلولی $newIndex",
-                    volumeText = "1",
-                    countText = defaultCountStr,
+                    volumeText = "",
+                    countText = "",
                     volumeUnit = state.outputVolumeUnit,
                     countUnit = state.unitMultiplier
                 )
@@ -805,6 +937,23 @@ class CellCalculatorViewModel : ViewModel() {
 
     private var lastAnalyzedBitmap: Bitmap? = null
 
+    fun toggleDeepQuadrantScan() {
+        _imageCounterState.update { it.copy(deepQuadrantScanEnabled = !it.deepQuadrantScanEnabled) }
+    }
+
+    fun selectCountingEngineMode(mode: CountingEngineMode) {
+        _imageCounterState.update { state ->
+            val cleanTool = if (mode == CountingEngineMode.GEMINI_AI_CLOUD &&
+                (state.activeTool == CellMarkerTool.SAMPLE_TEMPLATE_LIVE || state.activeTool == CellMarkerTool.SAMPLE_TEMPLATE_DEAD)
+            ) {
+                CellMarkerTool.ADD_LIVE
+            } else {
+                state.activeTool
+            }
+            state.copy(countingEngineMode = mode, activeTool = cleanTool)
+        }
+    }
+
     fun selectImageMarkerTool(tool: CellMarkerTool) {
         _imageCounterState.update { it.copy(activeTool = tool) }
     }
@@ -821,9 +970,38 @@ class CellCalculatorViewModel : ViewModel() {
         _imageCounterState.update { it.copy(markerScale = scale.coerceIn(0.20f, 1.0f)) }
     }
 
+    private fun confidenceThresholdFromSensitivity(sensitivity: Float): Int {
+        return (sensitivity.coerceIn(0.15f, 0.95f) * 100f).toInt().coerceIn(15, 95)
+    }
+
     fun onImageCanvasTapped(normX: Float, normY: Float) {
         val x = normX.coerceIn(0.005f, 0.995f)
         val y = normY.coerceIn(0.005f, 0.995f)
+        val currentTool = _imageCounterState.value.activeTool
+
+        if (currentTool == CellMarkerTool.SAMPLE_TEMPLATE_LIVE ||
+            currentTool == CellMarkerTool.SAMPLE_TEMPLATE_DEAD
+        ) {
+            val bmp = lastAnalyzedBitmap
+            if (bmp == null) {
+                _imageCounterState.update {
+                    it.copy(
+                        aiAnalysisState = AiCellAnalysisUiState.Error(
+                            "ابتدا یک عکس از گالری یا دوربین انتخاب کنید تا بتوانید سلول نمونه را مشخص کنید."
+                        )
+                    )
+                }
+                return
+            }
+            runCountThingsTemplateMatch(
+                bitmap = bmp,
+                tapNormX = x,
+                tapNormY = y,
+                isLiveTemplate = (currentTool == CellMarkerTool.SAMPLE_TEMPLATE_LIVE)
+            )
+            return
+        }
+
         _imageCounterState.update { state ->
             val hitThreshold = (0.011f + state.markerScale * 0.014f).coerceIn(0.013f, 0.028f)
             val nearest = state.markers.minByOrNull { m ->
@@ -832,52 +1010,77 @@ class CellCalculatorViewModel : ViewModel() {
             val nearestDist = nearest?.let { hypot(it.normalizedX - x, it.normalizedY - y) } ?: Float.MAX_VALUE
 
             when (state.activeTool) {
+                CellMarkerTool.SAMPLE_TEMPLATE_LIVE,
+                CellMarkerTool.SAMPLE_TEMPLATE_DEAD -> state
                 CellMarkerTool.ERASE -> {
                     if (nearest != null && nearestDist <= hitThreshold * 1.6f) {
-                        state.copy(markers = state.markers.filterNot { it.id == nearest.id })
+                        state.copy(
+                            markers = state.markers.filterNot { it.id == nearest.id },
+                            allAiMarkers = state.allAiMarkers.filterNot { it.id == nearest.id }
+                        )
                     } else state
                 }
                 CellMarkerTool.ADD_LIVE -> {
                     if (nearest != null && nearestDist <= hitThreshold) {
                         if (nearest.isLive) {
-                            state.copy(markers = state.markers.filterNot { it.id == nearest.id })
+                            state.copy(
+                                markers = state.markers.filterNot { it.id == nearest.id },
+                                allAiMarkers = state.allAiMarkers.filterNot { it.id == nearest.id }
+                            )
                         } else {
                             state.copy(
                                 markers = state.markers.map {
-                                    if (it.id == nearest.id) it.copy(isLive = true) else it
+                                    if (it.id == nearest.id) it.copy(isLive = true, confidence = 100) else it
+                                },
+                                allAiMarkers = state.allAiMarkers.map {
+                                    if (it.id == nearest.id) it.copy(isLive = true, confidence = 100) else it
                                 }
                             )
                         }
                     } else {
+                        val added = CellPointMarker(
+                            id = nextMarkerId++,
+                            normalizedX = x,
+                            normalizedY = y,
+                            isLive = true,
+                            isOnGridLine = isPointNearNeubauerGridLine(x, y, state.detectedGrid, 0.018f),
+                            confidence = 100
+                        )
                         state.copy(
-                            markers = state.markers + CellPointMarker(
-                                id = nextMarkerId++,
-                                normalizedX = x,
-                                normalizedY = y,
-                                isLive = true
-                            )
+                            markers = state.markers + added,
+                            allAiMarkers = state.allAiMarkers + added
                         )
                     }
                 }
                 CellMarkerTool.ADD_DEAD -> {
                     if (nearest != null && nearestDist <= hitThreshold) {
                         if (!nearest.isLive) {
-                            state.copy(markers = state.markers.filterNot { it.id == nearest.id })
+                            state.copy(
+                                markers = state.markers.filterNot { it.id == nearest.id },
+                                allAiMarkers = state.allAiMarkers.filterNot { it.id == nearest.id }
+                            )
                         } else {
                             state.copy(
                                 markers = state.markers.map {
-                                    if (it.id == nearest.id) it.copy(isLive = false) else it
+                                    if (it.id == nearest.id) it.copy(isLive = false, confidence = 100) else it
+                                },
+                                allAiMarkers = state.allAiMarkers.map {
+                                    if (it.id == nearest.id) it.copy(isLive = false, confidence = 100) else it
                                 }
                             )
                         }
                     } else {
+                        val added = CellPointMarker(
+                            id = nextMarkerId++,
+                            normalizedX = x,
+                            normalizedY = y,
+                            isLive = false,
+                            isOnGridLine = isPointNearNeubauerGridLine(x, y, state.detectedGrid, 0.018f),
+                            confidence = 100
+                        )
                         state.copy(
-                            markers = state.markers + CellPointMarker(
-                                id = nextMarkerId++,
-                                normalizedX = x,
-                                normalizedY = y,
-                                isLive = false
-                            )
+                            markers = state.markers + added,
+                            allAiMarkers = state.allAiMarkers + added
                         )
                     }
                 }
@@ -885,15 +1088,155 @@ class CellCalculatorViewModel : ViewModel() {
         }
     }
 
+    private fun runCountThingsTemplateMatch(
+        bitmap: Bitmap,
+        tapNormX: Float,
+        tapNormY: Float,
+        isLiveTemplate: Boolean
+    ) {
+        val typeLabel = if (isLiveTemplate) "سلول زنده" else "سلول مرده"
+        viewModelScope.launch {
+            _imageCounterState.update {
+                it.copy(
+                    aiAnalysisState = AiCellAnalysisUiState.Loading(
+                        statusText = "در حال تطبیق الگوی CountThings بر اساس نمونه $typeLabel..."
+                    )
+                )
+            }
+            try {
+                val otherTypeExisting = _imageCounterState.value.allAiMarkers.filter { it.isLive != isLiveTemplate }
+                val startId = nextMarkerId
+                val result = withContext(Dispatchers.Default) {
+                    CountThingsOpenCvEngine.analyzeWithTappedTemplate(
+                        sourceBitmap = bitmap,
+                        tapNormX = tapNormX,
+                        tapNormY = tapNormY,
+                        isLiveTemplate = isLiveTemplate,
+                        existingOtherTypeMarkers = otherTypeExisting,
+                        nextIdStart = startId
+                    )
+                }
+                nextMarkerId = (result.markers.maxOfOrNull { it.id } ?: startId) + 1L
+                val minConf = confidenceThresholdFromSensitivity(_imageCounterState.value.detectionSensitivity)
+                val visible = result.markers.filter { it.confidence >= minConf }
+
+                _imageCounterState.update {
+                    it.copy(
+                        templateMatchInfo = "الگوی $typeLabel با تطبیق OpenCV فعال است",
+                        activeTool = if (isLiveTemplate) CellMarkerTool.ADD_LIVE else CellMarkerTool.ADD_DEAD
+                    )
+                }
+
+                publishFullSlideAnalysisState(
+                    allAiMarkers = result.markers,
+                    visibleMarkers = visible,
+                    detectedGrid = result.detectedGrid,
+                    sourceTitle = "CountThings تطبیق الگو ($typeLabel)",
+                    customAiSummary = result.summaryPersian,
+                    technicalDetails = result.technicalDetails,
+                    technicalOutput = result.technicalOutput,
+                    openFullScreen = _imageCounterState.value.showFullScreenEditor
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "CountThings template matching failed", e)
+                _imageCounterState.update {
+                    it.copy(
+                        aiAnalysisState = AiCellAnalysisUiState.Error(
+                            "خطا در تطبیق الگوی OpenCV: ${e.localizedMessage ?: "خطای نامشخص"}"
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    fun analyzeBitmapWithOpenCvCountThings(
+        bitmap: Bitmap,
+        sourceLabel: String = "آنالیز آفلاین CountThings (OpenCV)"
+    ) {
+        lastAnalyzedBitmap = bitmap
+        viewModelScope.launch {
+            _imageCounterState.update {
+                it.copy(
+                    markers = emptyList(),
+                    allAiMarkers = emptyList(),
+                    detectedGrid = DetectedNeubauerGrid(),
+                    templateMatchInfo = "",
+                    aiAnalysisState = AiCellAnalysisUiState.Loading(
+                        statusText = "در حال پردازش آفلاین سبک CountThings (OpenCV: حذف شبکه + تشخیص هاله سلول)..."
+                    ),
+                    imageSourceLabel = "$sourceLabel (در حال شمارش OpenCV...)"
+                )
+            }
+
+            try {
+                val startId = nextMarkerId
+                val result = withContext(Dispatchers.Default) {
+                    CountThingsOpenCvEngine.analyzeAuto(
+                        sourceBitmap = bitmap,
+                        nextIdStart = startId
+                    )
+                }
+                nextMarkerId = (result.markers.maxOfOrNull { it.id } ?: startId) + 1L
+
+                val minConf = confidenceThresholdFromSensitivity(_imageCounterState.value.detectionSensitivity)
+                val visible = result.markers.filter { it.confidence >= minConf }
+
+                publishFullSlideAnalysisState(
+                    allAiMarkers = result.markers,
+                    visibleMarkers = visible,
+                    detectedGrid = result.detectedGrid,
+                    sourceTitle = "CountThings OpenCV (آفلاین)",
+                    customAiSummary = result.summaryPersian,
+                    technicalDetails = result.technicalDetails,
+                    technicalOutput = result.technicalOutput,
+                    openFullScreen = true
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "OpenCV auto cell detection failed", e)
+                _imageCounterState.update {
+                    it.copy(
+                        aiAnalysisState = AiCellAnalysisUiState.Error(
+                            "خطا در موتور آفلاین OpenCV: ${e.localizedMessage ?: "خطای پردازش تصویر"}"
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    fun analyzeSlideWithSelectedEngine(
+        bitmap: Bitmap,
+        sourceLabel: String = "آنالیز تصویر لام نئوبار"
+    ) {
+        lastAnalyzedBitmap = bitmap
+        when (_imageCounterState.value.countingEngineMode) {
+            CountingEngineMode.OPENCV_COUNTTHINGS -> analyzeBitmapWithOpenCvCountThings(bitmap, sourceLabel)
+            CountingEngineMode.GEMINI_AI_CLOUD -> analyzeBitmapWithGeminiAi(bitmap, sourceLabel)
+        }
+    }
+
     fun undoLastImageMarker() {
         _imageCounterState.update { state ->
             if (state.markers.isEmpty()) state
-            else state.copy(markers = state.markers.dropLast(1))
+            else {
+                val removedId = state.markers.last().id
+                state.copy(
+                    markers = state.markers.dropLast(1),
+                    allAiMarkers = state.allAiMarkers.filterNot { it.id == removedId }
+                )
+            }
         }
     }
 
     fun clearAllImageMarkers() {
-        _imageCounterState.update { it.copy(markers = emptyList()) }
+        _imageCounterState.update {
+            it.copy(markers = emptyList(), allAiMarkers = emptyList())
+        }
     }
 
     fun openFullScreenImageEditor() {
@@ -909,6 +1252,7 @@ class CellCalculatorViewModel : ViewModel() {
         _imageCounterState.update {
             it.copy(
                 markers = emptyList(),
+                allAiMarkers = emptyList(),
                 detectedGrid = DetectedNeubauerGrid(),
                 showFullScreenEditor = false,
                 imageSourceLabel = "عکسی انتخاب نشده — از گالری یا دوربین عکس لام را وارد کنید",
@@ -917,278 +1261,733 @@ class CellCalculatorViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Dynamically filters already-detected AI cells by their AI confidence score (15%..95%)
+     * without invoking any local pixel heuristic or re-calling the AI API.
+     */
     fun updateImageSensitivity(sensitivity: Float) {
-        val clamped = sensitivity.coerceIn(0.15f, 0.98f)
-        val keepFullScreen = _imageCounterState.value.showFullScreenEditor
-        _imageCounterState.update { it.copy(detectionSensitivity = clamped) }
-        lastAnalyzedBitmap?.let { bmp ->
-            autoDetectCellsFromImage(
-                bitmap = bmp,
-                sourceLabel = _imageCounterState.value.imageSourceLabel,
-                openFullScreen = keepFullScreen
-            )
+        val clamped = sensitivity.coerceIn(0.15f, 0.95f)
+        val minConf = confidenceThresholdFromSensitivity(clamped)
+        _imageCounterState.update { state ->
+            if (state.allAiMarkers.isEmpty()) {
+                state.copy(detectionSensitivity = clamped)
+            } else {
+                val filteredMarkers = state.allAiMarkers.filter { it.confidence >= minConf }
+                val live = filteredMarkers.count { it.isLive }
+                val dead = filteredMarkers.count { !it.isLive }
+                val total = live + dead
+                val onLine = filteredMarkers.count { it.isOnGridLine }
+                val overlap = filteredMarkers.count { it.isOverlapping }
+                val viability = if (total > 0) (live * 100.0 / total) else 0.0
+                val squares = state.squaresCount.coerceAtLeast(0.01)
+                val dilution = state.dilutionFactor.coerceAtLeast(1.0)
+                val chamber = state.chamberFactor.coerceAtLeast(1.0)
+                val viablePerMl = (live.toDouble() / squares) * dilution * chamber
+                val totalPerMl = (total.toDouble() / squares) * dilution * chamber
+
+                val tempState = state.copy(markers = filteredMarkers)
+                val grid4x4Live = tempState.computeGrid4x4Counts(isLiveFilter = true)
+                val grid4x4Dead = tempState.computeGrid4x4Counts(isLiveFilter = false)
+
+                val prevSuccess = state.aiAnalysisState as? AiCellAnalysisUiState.Success
+                val updatedAiState = prevSuccess?.copy(
+                    liveCount = live,
+                    deadCount = dead,
+                    onGridLineCount = onLine,
+                    overlappingCount = overlap,
+                    viableConcentrationPerMl = viablePerMl,
+                    totalConcentrationPerMl = totalPerMl,
+                    viabilityPercent = viability,
+                    grid4x4Live = grid4x4Live,
+                    grid4x4Dead = grid4x4Dead
+                ) ?: state.aiAnalysisState
+
+                state.copy(
+                    detectionSensitivity = clamped,
+                    markers = filteredMarkers,
+                    aiAnalysisState = updatedAiState
+                )
+            }
         }
     }
 
     /**
-     * Full Multimodal AI Image Analysis using Firebase AI Logic (gemini-3.8-flash):
-     * - Directly analyzes the original microscope slide photo
-     * - Detects all live (viable) and dead (non-viable / Trypan-blue) cells directly on the original photo
-     * - Detects horizontal & vertical Neubauer hemocytometer grid lines
-     * - Detects cells lying ON or touching the Neubauer grid lines
-     * - Resolves overlapping / touching cell clusters and doublets into individual cell counts
-     * - Automatically computes final cell concentration (cells/mL), viability %, and total cells
+     * Pure High-Precision Gemini Vision AI Pipeline:
+     * - 100% of cell detection, live/dead classification, grid line localization, and artifact filtering
+     *   is performed by Gemini AI (ZERO local pixel heuristic contamination).
+     * - Default Mode (Single Unified Pass, 1792px): Performs full slide calibration + grid detection +
+     *   exact cell localization in ONE single API request (safe for Free Tier 15 RPM quota!).
+     * - Deep 4-Quadrant Mode (when deepQuadrantScanEnabled == true): Calibrates full slide first, then scans
+     *   4 zoomed overlapping quadrants sequentially with cooldown pacing so crowded slides get 2x zoom without
+     *   burst rate-limit spikes.
      */
     fun analyzeBitmapWithGeminiAi(
         bitmap: Bitmap,
         sourceLabel: String = "آنالیز کامل هوش مصنوعی Gemini"
     ) {
         lastAnalyzedBitmap = bitmap
+        val selectedOption = _imageCounterState.value.selectedAiModel
+        val useDeepQuadrants = _imageCounterState.value.deepQuadrantScanEnabled
 
         viewModelScope.launch {
             _imageCounterState.update {
-                it.copy(aiAnalysisState = AiCellAnalysisUiState.Loading)
-            }
-
-            val currentSensitivity = _imageCounterState.value.detectionSensitivity.coerceIn(0.15f, 0.98f)
-            // 1. Run high-precision direct optical analysis on the original image (Grid lines + Live/Dead + On-Line + Overlapping)
-            val directAnalysis = withContext(Dispatchers.Default) {
-                analyzeFullSlideDirectly(bitmap, currentSensitivity)
-            }
-
-            // Show initial detected markers and Neubauer grid lines immediately
-            val initialMarkers = directAnalysis.candidates.map { cand ->
-                CellPointMarker(
-                    id = nextMarkerId++,
-                    normalizedX = cand.normalizedX,
-                    normalizedY = cand.normalizedY,
-                    isLive = cand.defaultIsLive,
-                    isOnGridLine = cand.isOnGridLine,
-                    isOverlapping = cand.isOverlapping
-                )
-            }
-            val selectedModelOption = _imageCounterState.value.selectedAiModel
-            _imageCounterState.update { state ->
-                state.copy(
-                    markers = initialMarkers,
-                    detectedGrid = directAnalysis.detectedGrid,
-                    imageSourceLabel = "$sourceLabel (در حال آنالیز مستقیم عکس با ${selectedModelOption.shortBadge}...)"
+                it.copy(
+                    markers = emptyList(),
+                    allAiMarkers = emptyList(),
+                    detectedGrid = DetectedNeubauerGrid(),
+                    aiAnalysisState = AiCellAnalysisUiState.Loading(
+                        statusText = if (useDeepQuadrants) {
+                            "مرحله ۱ از ۵: کالیبراسیون شبکه نئوبار و الگوی سلول‌ها با ${selectedOption.shortBadge}..."
+                        } else {
+                            "در حال ارسال تصویر با وضوح بالا (۱ درخواست) به ${selectedOption.shortBadge}..."
+                        }
+                    ),
+                    imageSourceLabel = "$sourceLabel (در حال آنالیز با ${selectedOption.shortBadge}...)"
                 )
             }
 
             try {
-                // Scale original bitmap to 640x640 so Gemini sees fine cell rings, grid lines, and overlapping doublets clearly
-                val inferenceBitmap = withContext(Dispatchers.Default) {
-                    val maxDim = 640
-                    if (bitmap.width > maxDim || bitmap.height > maxDim) {
-                        val ratio = minOf(maxDim.toFloat() / bitmap.width, maxDim.toFloat() / bitmap.height)
-                        val w = (bitmap.width * ratio).toInt().coerceAtLeast(1)
-                        val h = (bitmap.height * ratio).toInt().coerceAtLeast(1)
-                        Bitmap.createScaledBitmap(bitmap, w, h, true)
-                    } else {
-                        bitmap
+                val candidateOptions = buildModelFallbackChain(selectedOption)
+                var activeModelOption = selectedOption
+                var fallbackNotice: String? = null
+                val calibration: SlideContextCalibration
+                val rawDetections: List<QuadrantDetectedCell>
+
+                if (!useDeepQuadrants) {
+                    // Single unified high-resolution pass (1792px max side) -> ONLY 1 API call per slide
+                    val unifiedBitmap = withContext(Dispatchers.Default) {
+                        scaleBitmapPreserveAspect(bitmap, maxDim = 1792)
                     }
-                }
 
-                val prompt = """
-                    Perform a complete direct microscopic analysis of this Neubauer hemocytometer slide photo:
-                    1. Detect all LIVE cells (round, bright refractile center/halo, unstained) directly from the image.
-                    2. Detect all DEAD cells (Trypan-blue stained dark blue or dark/lysed non-refractile core) directly from the image.
-                    3. Detect the horizontal and vertical Neubauer grid lines (normalized 0..1000 in verticalGridLines and horizontalGridLines).
-                    4. Detect cells that fall ON or touch the Neubauer grid lines (mark onGridLine = true).
-                    5. Detect overlapping or touching cells (doublets/clusters) and count each individual cell in the cluster (mark isOverlapping = true).
-                    6. Return JSON with liveCount, deadCount, onGridLineCount, overlappingCellCount, detectedSquaresCount, brightCenterLive, verticalGridLines, horizontalGridLines, detectedCells (up to 120 key cells with x, y in 0..1000, isLive, onGridLine, isOverlapping), and a comprehensive Persian analysisSummary.
-                """.trimIndent()
+                    var unifiedResult: Pair<SlideContextCalibration, List<QuadrantDetectedCell>>? = null
+                    var lastErr: Exception? = null
 
-                val multimodalContent = content {
-                    image(inferenceBitmap)
-                    text(prompt)
-                }
-
-                val primaryModel = when (selectedModelOption) {
-                    AiModelOption.GEMINI_4_ARGON -> geminiArgonModel
-                    AiModelOption.GEMINI_3_8_FLASH -> gemini38FlashModel
-                }
-                val fallbackModel = when (selectedModelOption) {
-                    AiModelOption.GEMINI_4_ARGON -> gemini38FlashModel
-                    AiModelOption.GEMINI_3_8_FLASH -> geminiArgonModel
-                }
-                var activeModelBadge = selectedModelOption.shortBadge
-
-                val response = try {
-                    withTimeout(60_000L) {
-                        primaryModel.generateContent(multimodalContent)
-                    }
-                } catch (primaryErr: Exception) {
-                    if (primaryErr is CancellationException && primaryErr !is TimeoutCancellationException) {
-                        throw primaryErr
-                    }
-                    Log.w(TAG, "Primary model (${selectedModelOption.modelId}) failed, trying fallback model", primaryErr)
-                    activeModelBadge = if (selectedModelOption == AiModelOption.GEMINI_4_ARGON) {
-                        AiModelOption.GEMINI_3_8_FLASH.shortBadge
-                    } else {
-                        AiModelOption.GEMINI_4_ARGON.shortBadge
-                    }
-                    withTimeout(60_000L) {
-                        fallbackModel.generateContent(multimodalContent)
-                    }
-                }
-
-                val jsonString = response.text
-                    ?: throw IllegalStateException("پاسخ خالی از مدل هوش مصنوعی دریافت شد.")
-
-                val json = JSONObject(jsonString)
-                val aiLiveCount = json.optInt("liveCount", -1)
-                val aiDeadCount = json.optInt("deadCount", -1)
-                val brightCenterLive = json.optBoolean("brightCenterLive", true)
-                val aiSummary = json.optString("analysisSummary", "")
-
-                val aiVertLines = ArrayList<Float>()
-                json.optJSONArray("verticalGridLines")?.let { arr ->
-                    for (i in 0 until arr.length()) {
-                        val v = (arr.optInt(i, -1) / 1000f).coerceIn(0.02f, 0.98f)
-                        if (v in 0.02f..0.98f) aiVertLines.add(v)
-                    }
-                }
-                val aiHorizLines = ArrayList<Float>()
-                json.optJSONArray("horizontalGridLines")?.let { arr ->
-                    for (i in 0 until arr.length()) {
-                        val v = (arr.optInt(i, -1) / 1000f).coerceIn(0.02f, 0.98f)
-                        if (v in 0.02f..0.98f) aiHorizLines.add(v)
-                    }
-                }
-
-                data class AiCellPoint(
-                    val nx: Float,
-                    val ny: Float,
-                    val isLive: Boolean,
-                    val onGridLine: Boolean,
-                    val isOverlapping: Boolean
-                )
-                val aiPoints = ArrayList<AiCellPoint>()
-                json.optJSONArray("detectedCells")?.let { arr ->
-                    for (i in 0 until arr.length()) {
-                        val obj = arr.optJSONObject(i) ?: continue
-                        val x = (obj.optInt("x", -1) / 1000f)
-                        val y = (obj.optInt("y", -1) / 1000f)
-                        if (x in 0.03f..0.97f && y in 0.03f..0.97f) {
-                            aiPoints.add(
-                                AiCellPoint(
-                                    nx = x,
-                                    ny = y,
-                                    isLive = obj.optBoolean("isLive", true),
-                                    onGridLine = obj.optBoolean("onGridLine", false),
-                                    isOverlapping = obj.optBoolean("isOverlapping", false)
-                                )
+                    for ((idx, opt) in candidateOptions.withIndex()) {
+                        try {
+                            if (idx > 0) {
+                                _imageCounterState.update {
+                                    it.copy(
+                                        aiAnalysisState = AiCellAnalysisUiState.Loading(
+                                            statusText = "تلاش خودکار با مدل جایگزین ${opt.shortBadge}..."
+                                        )
+                                    )
+                                }
+                            }
+                            unifiedResult = runUnifiedSinglePassAnalysis(
+                                model = unifiedModelsByOption.getValue(opt),
+                                scaledBitmap = unifiedBitmap
                             )
+                            activeModelOption = opt
+                            if (opt != selectedOption) {
+                                fallbackNotice = "مدل ${selectedOption.shortBadge} در دسترس نبود (نیازمند پلن Blaze یا سهمیه پر) و آنالیز با ${opt.shortBadge} انجام شد."
+                            }
+                            break
+                        } catch (err: Exception) {
+                            if (err is CancellationException && err !is TimeoutCancellationException) {
+                                throw err
+                            }
+                            lastErr = err
+                            Log.w(TAG, "Unified pass failed on ${opt.modelId}", err)
                         }
                     }
-                }
 
-                val fusedGrid = if (directAnalysis.detectedGrid.verticalLines.size >= 3 &&
-                    directAnalysis.detectedGrid.horizontalLines.size >= 3
-                ) {
-                    directAnalysis.detectedGrid
+                    val pair = unifiedResult ?: throw (
+                        lastErr ?: IllegalStateException("خطا در دریافت پاسخ از مدل هوش مصنوعی")
+                    )
+                    calibration = pair.first
+                    rawDetections = pair.second
+                    if (activeModelOption != selectedOption) {
+                        _imageCounterState.update { state ->
+                            state.copy(selectedAiModel = activeModelOption)
+                        }
+                    }
                 } else {
-                    DetectedNeubauerGrid(
-                        verticalLines = if (aiVertLines.size >= 2) aiVertLines.sorted() else directAnalysis.detectedGrid.verticalLines,
-                        horizontalLines = if (aiHorizLines.size >= 2) aiHorizLines.sorted() else directAnalysis.detectedGrid.horizontalLines,
-                        detectedSmallSquares = 16,
-                        detectedLargeSquares = json.optInt("detectedSquaresCount", 1).coerceAtLeast(1)
+                    // Two-stage zoomed 4-quadrant pipeline (sequential pacing to stay gentle on rate limits)
+                    val fullScaledBitmap = withContext(Dispatchers.Default) {
+                        scaleBitmapPreserveAspect(bitmap, maxDim = 1536)
+                    }
+
+                    var stage1Result: SlideContextCalibration? = null
+                    var lastStage1Error: Exception? = null
+
+                    for ((idx, opt) in candidateOptions.withIndex()) {
+                        try {
+                            if (idx > 0) {
+                                _imageCounterState.update {
+                                    it.copy(
+                                        aiAnalysisState = AiCellAnalysisUiState.Loading(
+                                            statusText = "تلاش مرحله اول با مدل جایگزین ${opt.shortBadge}..."
+                                        )
+                                    )
+                                }
+                            }
+                            stage1Result = runStage1SlideCalibration(
+                                model = stage1ModelsByOption.getValue(opt),
+                                fullScaledBitmap = fullScaledBitmap
+                            )
+                            activeModelOption = opt
+                            if (opt != selectedOption) {
+                                fallbackNotice = "مدل ${selectedOption.shortBadge} در دسترس نبود و اسکن با ${opt.shortBadge} انجام شد."
+                            }
+                            break
+                        } catch (err: Exception) {
+                            if (err is CancellationException && err !is TimeoutCancellationException) {
+                                throw err
+                            }
+                            lastStage1Error = err
+                            Log.w(TAG, "Stage 1 failed on model ${opt.modelId}", err)
+                        }
+                    }
+
+                    calibration = stage1Result ?: throw (
+                        lastStage1Error ?: IllegalStateException("خطا در مرحله اول آنالیز تصویر با هوش مصنوعی")
+                    )
+
+                    _imageCounterState.update { state ->
+                        state.copy(
+                            selectedAiModel = activeModelOption,
+                            detectedGrid = calibration.detectedGrid
+                        )
+                    }
+
+                    val stage2Model = stage2ModelsByOption.getValue(activeModelOption)
+                    rawDetections = runStage2SequentialQuadrantDetection(
+                        model = stage2Model,
+                        activeModelBadge = activeModelOption.shortBadge,
+                        originalBitmap = bitmap,
+                        calibration = calibration
                     )
                 }
 
-                val calibratedMarkers = withContext(Dispatchers.Default) {
-                    fuseGeminiAndOpticalDetections(
-                        bitmap = bitmap,
-                        baseCandidates = directAnalysis.candidates,
-                        detectedGrid = fusedGrid,
-                        aiPoints = aiPoints.map { Triple(it.nx, it.ny, it.isLive) },
-                        aiLiveCount = aiLiveCount,
-                        aiDeadCount = aiDeadCount,
-                        brightCenterLive = brightCenterLive
+                // Deduplicate cross-quadrant overlap seams and mark proximity to grid lines / overlapping clusters
+                val cleanMarkers = withContext(Dispatchers.Default) {
+                    finalizeAiDetectedMarkers(
+                        detections = rawDetections,
+                        detectedGrid = calibration.detectedGrid
                     )
                 }
+
+                val minConfidence = confidenceThresholdFromSensitivity(_imageCounterState.value.detectionSensitivity)
+                val visibleMarkers = cleanMarkers.filter { it.confidence >= minConfidence }
+
+                val scanModeLabel = if (useDeepQuadrants) "اسکن ۴ ناحیه‌ای ۲×" else "اسکن تک‌مرحله‌ای با وضوح بالا"
+                val diagnosticsCode = buildAiDiagnosticsDetails(
+                    modelOption = activeModelOption,
+                    scanMode = scanModeLabel,
+                    calibration = calibration,
+                    totalRaw = cleanMarkers.size,
+                    visibleCount = visibleMarkers.size,
+                    minConfidence = minConfidence,
+                    fallbackNotice = fallbackNotice
+                )
 
                 publishFullSlideAnalysisState(
-                    markers = calibratedMarkers,
-                    detectedGrid = fusedGrid,
-                    sourceTitle = "آنالیز کامل با $activeModelBadge",
-                    customAiSummary = aiSummary
+                    allAiMarkers = cleanMarkers,
+                    visibleMarkers = visibleMarkers,
+                    detectedGrid = calibration.detectedGrid,
+                    sourceTitle = "آنالیز ${activeModelOption.shortBadge} ($scanModeLabel)",
+                    customAiSummary = calibration.analysisSummary,
+                    technicalDetails = diagnosticsCode,
+                    technicalOutput = "Model: ${activeModelOption.modelId} | Raw: ${cleanMarkers.size} | Filtered (>= $minConfidence%): ${visibleMarkers.size}",
+                    openFullScreen = true
                 )
-            } catch (e: CancellationException) {
-                if (e is TimeoutCancellationException) {
-                    Log.w(TAG, "Gemini cloud request timed out; completing with full direct optical AI analysis", e)
-                    applyDeepVisionAiCalibration(directAnalysis)
-                } else {
-                    throw e
+            } catch (e: TimeoutCancellationException) {
+                Log.e(TAG, "Gemini vision analysis timed out", e)
+                _imageCounterState.update {
+                    it.copy(
+                        aiAnalysisState = AiCellAnalysisUiState.Error(
+                            "زمان پاسخ‌گویی مدل هوش مصنوعی به پایان رسید. لطفاً اتصال اینترنت را بررسی کرده و دوباره تلاش کنید."
+                        )
+                    )
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Log.w(TAG, "Gemini cloud request unavailable; completing with full direct optical AI analysis", e)
-                applyDeepVisionAiCalibration(directAnalysis)
+                Log.e(TAG, "Gemini vision analysis failed", e)
+                _imageCounterState.update {
+                    it.copy(
+                        aiAnalysisState = AiCellAnalysisUiState.Error(
+                            formatFriendlyAiError(e, selectedOption)
+                        )
+                    )
+                }
             }
         }
     }
 
-    private fun applyDeepVisionAiCalibration(analysis: FullSlideAnalysisResult) {
-        val calibrated = analysis.candidates.map { cand ->
+    private fun isQuotaOrBillingError(err: Throwable): Boolean {
+        val msg = err.localizedMessage?.lowercase().orEmpty()
+        return msg.contains("quota") ||
+            msg.contains("rate-limit") ||
+            msg.contains("rate limit") ||
+            msg.contains("429") ||
+            msg.contains("resource_exhausted") ||
+            msg.contains("billing") ||
+            msg.contains("blaze") ||
+            msg.contains("free_tier") ||
+            msg.contains("exceeded")
+    }
+
+    private fun formatFriendlyAiError(err: Throwable, selectedOption: AiModelOption): String {
+        val raw = err.localizedMessage?.trim().orEmpty()
+        val lower = raw.lowercase()
+        val retrySecondsMatch = Regex("retry in ([0-9]+(?:\\.[0-9]+)?)s", RegexOption.IGNORE_CASE).find(raw)
+        val retrySec = retrySecondsMatch?.groupValues?.getOrNull(1)?.toDoubleOrNull()?.let { kotlin.math.ceil(it).toInt() }
+
+        return when {
+            lower.contains("quota") || lower.contains("free_tier") || lower.contains("rate-limit") || lower.contains("429") || lower.contains("resource_exhausted") -> {
+                buildString {
+                    append("سهمیه درخواست رایگان در دقیقه (Free Tier Rate Limit) پر شده است.")
+                    if (retrySec != null && retrySec > 0) {
+                        append("\n• لطفاً حدود $retrySec ثانیه صبر کرده و دکمه «تلاش مجدد» را بزنید.")
+                    } else {
+                        append("\n• لطفاً ۱۵ تا ۶۰ ثانیه صبر کرده و دوباره تلاش کنید.")
+                    }
+                    append("\n• برای حذف محدودیت و استفاده بدون وقفه از مدل‌های پیشرفته (به‌ویژه Gemini 4 Argon)، باید در پنل Firebase / Google Cloud طرح پروژه به Blaze (پرداخت به ازای مصرف) ارتقا یابد.")
+                }
+            }
+            lower.contains("billing") || lower.contains("blaze") -> {
+                "مدل ${selectedOption.shortBadge} نیازمند فعال بودن پلن Blaze در Firebase است. می‌توانید از مدل رایگان Gemini 3.8 Flash استفاده کنید یا صورت‌حساب Blaze را فعال نمایید."
+            }
+            lower.contains("app check") || lower.contains("403") -> {
+                "خطای دسترسی / App Check (کد ۴۰۳). لطفاً از اتصال اینترنت مطمئن شوید و نسخه جدید برنامه را دوباره باز کنید."
+            }
+            else -> {
+                val cleanMsg = raw.ifBlank { "خطای نامشخص در ارتباط با سرور هوش مصنوعی" }
+                "خطا در آنالیز تصویر با هوش مصنوعی: $cleanMsg"
+            }
+        }
+    }
+
+    private fun buildModelFallbackChain(selected: AiModelOption): List<AiModelOption> {
+        val ordered = listOf(selected, AiModelOption.GEMINI_3_8_FLASH, AiModelOption.GEMINI_3_5_FLASH_LITE)
+        return ordered.distinct()
+    }
+
+    private suspend fun scaleBitmapPreserveAspect(bitmap: Bitmap, maxDim: Int): Bitmap =
+        withContext(Dispatchers.Default) {
+            if (bitmap.width <= maxDim && bitmap.height <= maxDim) {
+                bitmap
+            } else {
+                val ratio = minOf(maxDim.toFloat() / bitmap.width, maxDim.toFloat() / bitmap.height)
+                val w = (bitmap.width * ratio).toInt().coerceAtLeast(1)
+                val h = (bitmap.height * ratio).toInt().coerceAtLeast(1)
+                Bitmap.createScaledBitmap(bitmap, w, h, true)
+            }
+        }
+
+    private suspend fun runUnifiedSinglePassAnalysis(
+        model: GenerativeModel,
+        scaledBitmap: Bitmap
+    ): Pair<SlideContextCalibration, List<QuadrantDetectedCell>> {
+        val prompt = """
+            این تصویر کامل یک لام نئوبار (Neubauer Hemocytometer) است.
+            در همین یک پاسخ دقیق انجام بده:
+            ۱. ویژگی ظاهری دقیق سلول‌های زنده (Live) و مرده / رنگ‌شده (Dead) را تشخیص بده و عوارض غیرسلولی (تقاطع خطوط شبکه، خط و خش، گردوغبار، حباب هوا، حاشیه تاریک گوشه‌ها) را حذف کن.
+            ۲. مختصات نرمال (۰ تا ۱۰۰۰) خطوط عمودی (`verticalGridLines`) و افقی (`horizontalGridLines`) شبکه نئوبار را استخراج کن.
+            ۳. مختصات دقیق مرکز تک‌تک سلول‌های واقعی داخل همین تصویر (`detectedCells` با `x` و `y` بین ۰ تا ۱۰۰۰، `isLive`, `onGridLine`, `isOverlapping`, `confidence`) را برگردان.
+            ۴. سلول‌های کم‌نور، روی خطوط شبکه (`onGridLine = true`) و توده‌های روی‌هم‌افتاده (`isOverlapping = true` با نقطه مجزا برای هر سلول) را جا نینداز، اما تقاطع‌های خالی شبکه و حباب‌ها را اصلاً علامت نزن!
+            ۵. خلاصه وضعیت لام را در `analysisSummary` به زبان فارسی روان بنویس.
+        """.trimIndent()
+
+        val response = withTimeout(75_000L) {
+            model.generateContent(
+                content {
+                    image(scaledBitmap)
+                    text(prompt)
+                }
+            )
+        }
+        val rawJson = response.text?.takeIf { it.isNotBlank() }
+            ?: throw IllegalStateException("پاسخ خالی از مدل هوش مصنوعی دریافت شد.")
+        val json = JSONObject(rawJson)
+
+        val calibration = parseSlideCalibrationFromJson(json)
+        val list = ArrayList<QuadrantDetectedCell>()
+        json.optJSONArray("detectedCells")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val x = obj.optInt("x", -1) / 1000f
+                val y = obj.optInt("y", -1) / 1000f
+                if (x in 0.005f..0.995f && y in 0.005f..0.995f) {
+                    list.add(
+                        QuadrantDetectedCell(
+                            quadrantIndex = -1,
+                            normalizedX = x,
+                            normalizedY = y,
+                            isLive = obj.optBoolean("isLive", true),
+                            onGridLine = obj.optBoolean("onGridLine", false),
+                            isOverlapping = obj.optBoolean("isOverlapping", false),
+                            confidence = obj.optInt("confidence", 85).coerceIn(1, 100),
+                            interiorScore = 1f
+                        )
+                    )
+                }
+            }
+        }
+        return calibration to list
+    }
+
+    private fun parseSlideCalibrationFromJson(json: JSONObject): SlideContextCalibration {
+        val vLines = ArrayList<Float>()
+        json.optJSONArray("verticalGridLines")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val v = arr.optInt(i, -1) / 1000f
+                if (v in 0.02f..0.98f) vLines.add(v)
+            }
+        }
+        val hLines = ArrayList<Float>()
+        json.optJSONArray("horizontalGridLines")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val v = arr.optInt(i, -1) / 1000f
+                if (v in 0.02f..0.98f) hLines.add(v)
+            }
+        }
+        val sortedV = deduplicateGridLineCoords(vLines)
+        val sortedH = deduplicateGridLineCoords(hLines)
+        val smallSquares = if (sortedV.size >= 2 && sortedH.size >= 2) {
+            ((sortedV.size - 1) * (sortedH.size - 1)).coerceIn(1, 16)
+        } else {
+            16
+        }
+
+        return SlideContextCalibration(
+            microscopyMode = json.optString("microscopyMode", "Microscope Hemocytometer"),
+            liveCellSignature = json.optString("liveCellVisualSignature", "Round bright/refractile core surrounded by dark circular cell membrane"),
+            deadCellSignature = json.optString("deadCellVisualSignature", "Dark stained / opaque non-refractile round or ovoid cell"),
+            artifactsToIgnore = json.optString("artifactsToIgnore", "Grid intersections, scratches, dust fibers, air bubbles, dark eyepiece corners"),
+            detectedGrid = DetectedNeubauerGrid(
+                verticalLines = sortedV,
+                horizontalLines = sortedH,
+                detectedSmallSquares = smallSquares,
+                detectedLargeSquares = json.optInt("detectedSquaresCount", 1).coerceIn(1, 9)
+            ),
+            analysisSummary = json.optString("analysisSummary", "کالیبراسیون شبکه نئوبار و تشخیص ویژگی سلول‌ها با موفقیت انجام شد.")
+        )
+    }
+
+    private suspend fun runStage1SlideCalibration(
+        model: GenerativeModel,
+        fullScaledBitmap: Bitmap
+    ): SlideContextCalibration {
+        val prompt = """
+            این تصویر کامل یک لام نئوبار (Neubauer Hemocytometer) است.
+            پیش از شمارش، ساختار کلی تصویر را دقیق کالیبره کن:
+            ۱. ویژگی ظاهری دقیق «سلول‌های زنده» (Live) و «سلول‌های مرده / رنگ‌شده» (Dead) در همین عکس را شرح بده.
+            ۲. تمام عوارض غیرسلولی موجود در این عکس که نباید به اشتباه شمارش شوند (مثل نقاط تقاطع خطوط سفید شبکه نئوبار، خط و خش شیشه، رشته‌ها، گردوغبار، حباب هوا، و گوشه‌های تیره چشمی میکروسکوپ) را مشخص کن.
+            ۳. مختصات نرمال (۰ تا ۱۰۰۰) خطوط عمودی (`verticalGridLines`) و خطوط افقی (`horizontalGridLines`) شبکه نئوبار را با دقت بالا استخراج کن.
+            ۴. خلاصه فارسی کوتاهی درباره کیفیت تصویر و نوع سلول‌ها بنویس.
+        """.trimIndent()
+
+        val response = withTimeout(60_000L) {
+            model.generateContent(
+                content {
+                    image(fullScaledBitmap)
+                    text(prompt)
+                }
+            )
+        }
+        val rawJson = response.text?.takeIf { it.isNotBlank() }
+            ?: throw IllegalStateException("مدل در مرحله کالیبراسیون پاسخ خالی برگرداند.")
+        return parseSlideCalibrationFromJson(JSONObject(rawJson))
+    }
+
+    private fun deduplicateGridLineCoords(coords: List<Float>): List<Float> {
+        if (coords.isEmpty()) return emptyList()
+        val sorted = coords.sorted()
+        val merged = ArrayList<Float>(sorted.size)
+        for (c in sorted) {
+            if (merged.isEmpty() || abs(c - merged.last()) > 0.035f) {
+                merged.add(c)
+            }
+        }
+        return merged.take(8)
+    }
+
+    private suspend fun runStage2SequentialQuadrantDetection(
+        model: GenerativeModel,
+        activeModelBadge: String,
+        originalBitmap: Bitmap,
+        calibration: SlideContextCalibration
+    ): List<QuadrantDetectedCell> {
+        val rois = listOf(
+            QuadrantRoi(0, "بالا-چپ", 0.000f, 0.555f, 0.000f, 0.555f),
+            QuadrantRoi(1, "بالا-راست", 0.445f, 1.000f, 0.000f, 0.555f),
+            QuadrantRoi(2, "پایین-چپ", 0.000f, 0.555f, 0.445f, 1.000f),
+            QuadrantRoi(3, "پایین-راست", 0.445f, 1.000f, 0.445f, 1.000f)
+        )
+
+        val w = originalBitmap.width
+        val h = originalBitmap.height
+        val allResults = ArrayList<QuadrantDetectedCell>(256)
+
+        for ((idx, roi) in rois.withIndex()) {
+            _imageCounterState.update { state ->
+                state.copy(
+                    aiAnalysisState = AiCellAnalysisUiState.Loading(
+                        statusText = "مرحله ${idx + 2} از ۵: اسکن دقیق ناحیه «${roi.label}» روی $activeModelBadge..."
+                    )
+                )
+            }
+
+            if (idx > 0) {
+                delay(1200L)
+            }
+
+            val cropLeft = (roi.xStart * w).toInt().coerceIn(0, (w - 2).coerceAtLeast(0))
+            val cropTop = (roi.yStart * h).toInt().coerceIn(0, (h - 2).coerceAtLeast(0))
+            val cropRight = (roi.xEnd * w).toInt().coerceIn(cropLeft + 1, w)
+            val cropBottom = (roi.yEnd * h).toInt().coerceIn(cropTop + 1, h)
+            val cropW = (cropRight - cropLeft).coerceAtLeast(1)
+            val cropH = (cropBottom - cropTop).toInt().coerceAtLeast(1)
+
+            val actualXStart = cropLeft.toFloat() / w.toFloat()
+            val actualXSpan = cropW.toFloat() / w.toFloat()
+            val actualYStart = cropTop.toFloat() / h.toFloat()
+            val actualYSpan = cropH.toFloat() / h.toFloat()
+
+            val cropped = withContext(Dispatchers.Default) {
+                val rawCrop = Bitmap.createBitmap(originalBitmap, cropLeft, cropTop, cropW, cropH)
+                scaleBitmapPreserveAspect(rawCrop, maxDim = 1024)
+            }
+
+            val quadrantPrompt = """
+                این تصویر بزرگ‌نمایی‌شده ناحیه «${roi.label}» از لام نئوبار است.
+                کالیبراسیون استخراج‌شده از کل لام:
+                • نوع تصویربرداری: ${calibration.microscopyMode}
+                • ظاهر سلول‌های زنده (Live): ${calibration.liveCellSignature}
+                • ظاهر سلول‌های مرده (Dead): ${calibration.deadCellSignature}
+                • موارد غیرسلولی که مطلقاً نباید علامت‌گذاری شوند: ${calibration.artifactsToIgnore}
+
+                تک‌تک سلول‌های واقعی داخل همین برش تصویر را با مختصات دقیق مرکز هر سلول (`x`, `y` بین ۰ تا ۱۰۰۰ نسبت به همین تصویر برش‌خورده) برگردان:
+                - سلول‌های کم‌نور یا چسبیده به خطوط نئوبار (`onGridLine = true`) را جا نینداز.
+                - در توده‌های روی‌هم‌افتاده، مرکز هر سلول مجزا را جداگانه مشخص کن (`isOverlapping = true`).
+                - نقاط تقاطع خالی خطوط سفید شبکه، حباب هوا، خط‌وخش، و حاشیه سیاه بیرون میدان دید را اصلاً علامت نزن!
+            """.trimIndent()
+
+            val json = executeStage2WithSmartRetry(model, cropped, quadrantPrompt)
+            json.optJSONArray("detectedCells")?.let { arr ->
+                for (i in 0 until arr.length()) {
+                    val obj = arr.optJSONObject(i) ?: continue
+                    val qxRaw = obj.optInt("x", -1)
+                    val qyRaw = obj.optInt("y", -1)
+                    if (qxRaw !in 0..1000 || qyRaw !in 0..1000) continue
+                    val qxNorm = qxRaw / 1000f
+                    val qyNorm = qyRaw / 1000f
+
+                    val marginX = when (roi.index) {
+                        0, 2 -> 1f - qxNorm
+                        else -> qxNorm
+                    }
+                    val marginY = when (roi.index) {
+                        0, 1 -> 1f - qyNorm
+                        else -> qyNorm
+                    }
+                    val interiorScore = minOf(marginX, marginY)
+
+                    val fullX = (actualXStart + qxNorm * actualXSpan).coerceIn(0.005f, 0.995f)
+                    val fullY = (actualYStart + qyNorm * actualYSpan).coerceIn(0.005f, 0.995f)
+
+                    allResults.add(
+                        QuadrantDetectedCell(
+                            quadrantIndex = roi.index,
+                            normalizedX = fullX,
+                            normalizedY = fullY,
+                            isLive = obj.optBoolean("isLive", true),
+                            onGridLine = obj.optBoolean("onGridLine", false),
+                            isOverlapping = obj.optBoolean("isOverlapping", false),
+                            confidence = obj.optInt("confidence", 85).coerceIn(1, 100),
+                            interiorScore = interiorScore
+                        )
+                    )
+                }
+            }
+        }
+        return allResults
+    }
+
+    private suspend fun executeStage2WithSmartRetry(
+        model: GenerativeModel,
+        bitmap: Bitmap,
+        prompt: String
+    ): JSONObject {
+        var lastErr: Exception? = null
+        repeat(2) { attempt ->
+            try {
+                val response = withTimeout(75_000L) {
+                    model.generateContent(
+                        content {
+                            image(bitmap)
+                            text(prompt)
+                        }
+                    )
+                }
+                val rawText = response.text?.takeIf { it.isNotBlank() }
+                    ?: throw IllegalStateException("پاسخ خالی از مدل هوش مصنوعی دریافت شد.")
+                return JSONObject(rawText)
+            } catch (err: Exception) {
+                if (err is CancellationException && err !is TimeoutCancellationException) {
+                    throw err
+                }
+                lastErr = err
+                // Never immediately retry if blocked by quota/billing/rate-limit (avoids amplifying 429 errors)
+                if (isQuotaOrBillingError(err)) {
+                    throw err
+                }
+                Log.w(TAG, "Stage 2 detection attempt ${attempt + 1} failed (non-quota)", err)
+                if (attempt == 0) delay(1000L)
+            }
+        }
+        throw (lastErr ?: IllegalStateException("خطا در مرحله مکان‌یابی سلول‌ها"))
+    }
+
+    private fun finalizeAiDetectedMarkers(
+        detections: List<QuadrantDetectedCell>,
+        detectedGrid: DetectedNeubauerGrid
+    ): List<CellPointMarker> {
+        if (detections.isEmpty()) return emptyList()
+
+        // Sort highest interiorScore (furthest from cut seams) and highest confidence first
+        val ordered = detections.sortedByDescending { it.interiorScore * 100f + it.confidence.toFloat() }
+        val kept = ArrayList<QuadrantDetectedCell>(ordered.size)
+
+        for (cand in ordered) {
+            val isDuplicate = kept.any { existing ->
+                val dist = hypot(existing.normalizedX - cand.normalizedX, existing.normalizedY - cand.normalizedY)
+                if (existing.quadrantIndex != cand.quadrantIndex) {
+                    // Different quadrants overlapping in the center seam strip: deduplicate if within 1.5%
+                    dist < 0.015f
+                } else {
+                    // Same quadrant: preserve distinct touching doublets unless virtually identical coordinate (< 0.35%)
+                    dist < 0.0035f
+                }
+            }
+            if (!isDuplicate) {
+                kept.add(cand)
+            }
+        }
+
+        // Compute isOverlapping from AI flag OR geometric proximity to another accepted cell (< 2.2%)
+        // Compute isOnGridLine from AI flag OR geometric proximity to AI-detected grid lines (< 1.8%)
+        return kept.mapIndexed { idx, cand ->
+            val hasCloseNeighbor = kept.indices.any { otherIdx ->
+                otherIdx != idx &&
+                    hypot(kept[otherIdx].normalizedX - cand.normalizedX, kept[otherIdx].normalizedY - cand.normalizedY) <= 0.022f
+            }
+            val onLine = cand.onGridLine ||
+                isPointNearNeubauerGridLine(cand.normalizedX, cand.normalizedY, detectedGrid, 0.018f)
+
             CellPointMarker(
                 id = nextMarkerId++,
                 normalizedX = cand.normalizedX,
                 normalizedY = cand.normalizedY,
-                isLive = cand.defaultIsLive,
-                isOnGridLine = cand.isOnGridLine,
-                isOverlapping = cand.isOverlapping
+                isLive = cand.isLive,
+                isOnGridLine = onLine,
+                isOverlapping = cand.isOverlapping || hasCloseNeighbor,
+                confidence = cand.confidence
             )
         }
-        publishFullSlideAnalysisState(
-            markers = calibrated,
-            detectedGrid = analysis.detectedGrid,
-            sourceTitle = "آنالیز هوشمند مستقیم تصویر",
-            customAiSummary = ""
-        )
+    }
+
+    private fun isPointNearNeubauerGridLine(
+        nx: Float,
+        ny: Float,
+        grid: DetectedNeubauerGrid,
+        threshold: Float = 0.018f
+    ): Boolean {
+        val nearVert = grid.verticalLines.any { abs(it - nx) <= threshold }
+        val nearHoriz = grid.horizontalLines.any { abs(it - ny) <= threshold }
+        return nearVert || nearHoriz
+    }
+
+    private fun buildAiDiagnosticsDetails(
+        modelOption: AiModelOption,
+        scanMode: String,
+        calibration: SlideContextCalibration,
+        totalRaw: Int,
+        visibleCount: Int,
+        minConfidence: Int,
+        fallbackNotice: String? = null
+    ): String {
+        val headerNotice = if (!fallbackNotice.isNullOrBlank()) {
+            "توجه: $fallbackNotice\n"
+        } else {
+            ""
+        }
+        return headerNotice + """
+            مدل هوش مصنوعی فعال: ${modelOption.modelId} (دما = ۰، خروجی ساخت‌یافته JSON)
+            حالت اسکن: $scanMode
+            نوع میکروسکوپی: ${calibration.microscopyMode}
+            الگوی سلول زنده (Live): ${calibration.liveCellSignature}
+            الگوی سلول مرده (Dead): ${calibration.deadCellSignature}
+            موارد غیرسلولی حذف‌شده: ${calibration.artifactsToIgnore}
+            خطوط شبکه شناسایی‌شده: ${calibration.detectedGrid.verticalLines.size} خط عمودی × ${calibration.detectedGrid.horizontalLines.size} خط افقی
+            کل تشخیص‌های خام هوش مصنوعی: $totalRaw | نمایش‌داده‌شده (اطمینان >= $minConfidence%): $visibleCount
+        """.trimIndent()
     }
 
     private fun publishFullSlideAnalysisState(
-        markers: List<CellPointMarker>,
+        allAiMarkers: List<CellPointMarker>,
+        visibleMarkers: List<CellPointMarker>,
         detectedGrid: DetectedNeubauerGrid,
         sourceTitle: String,
         customAiSummary: String,
+        technicalDetails: String = "",
+        technicalOutput: String = "",
         openFullScreen: Boolean = true
     ) {
-        val currentState = _imageCounterState.value
-        val finalLive = markers.count { it.isLive }
-        val finalDead = markers.count { !it.isLive }
+        val currentState = _imageCounterState.value.copy(
+            markers = visibleMarkers,
+            allAiMarkers = allAiMarkers,
+            detectedGrid = detectedGrid
+        )
+        val finalLive = visibleMarkers.count { it.isLive }
+        val finalDead = visibleMarkers.count { !it.isLive }
         val total = finalLive + finalDead
-        val onLineCount = markers.count { it.isOnGridLine }
-        val overlapCount = markers.count { it.isOverlapping }
+        val onLineCount = visibleMarkers.count { it.isOnGridLine }
+        val overlapCount = visibleMarkers.count { it.isOverlapping }
         val viabilityPct = if (total > 0) (finalLive * 100.0 / total) else 0.0
 
         val squares = currentState.squaresCount.coerceAtLeast(0.01)
         val dilution = currentState.dilutionFactor.coerceAtLeast(1.0)
         val chamber = currentState.chamberFactor.coerceAtLeast(1.0)
-        val viablePerMl = (finalLive.toDouble() / squares) * dilution * chamber
+        val avgLivePerSquare = finalLive.toDouble() / squares
+        val viablePerMl = avgLivePerSquare * dilution * chamber
         val totalPerMl = (total.toDouble() / squares) * dilution * chamber
         val viableMillionsStr = NumberFormatter.formatWithCommas(viablePerMl / 1_000_000.0, 3)
         val totalMillionsStr = NumberFormatter.formatWithCommas(totalPerMl / 1_000_000.0, 3)
+
+        val grid4x4Live = currentState.computeGrid4x4Counts(isLiveFilter = true)
+        val grid4x4Dead = currentState.computeGrid4x4Counts(isLiveFilter = false)
+
+        val formulaPersian = buildString {
+            append("فرمول استاندارد غلظت سلولی در لام نئوبار:\n")
+            append("غلظت سلول زنده (Cells/mL) = (تعداد سلول زنده ÷ تعداد خانه بزرگ) × ضریب رقت × ۱۰⁴\n")
+            append("جایگذاری اعداد:\n")
+            append("• میانگین سلول زنده در هر خانه بزرگ = $finalLive ÷ ${NumberFormatter.formatClean(squares, 2)} = ${NumberFormatter.formatWithCommas(avgLivePerSquare, 2)}\n")
+            append("• غلظت سلول زنده = ${NumberFormatter.formatWithCommas(avgLivePerSquare, 2)} × ${NumberFormatter.formatClean(dilution, 2)} × ${NumberFormatter.formatWithCommas(chamber, 0)} = ${NumberFormatter.formatWithCommas(viablePerMl, 0)} سلول/mL ($viableMillionsStr میلیون/mL)\n")
+            append("• غلظت کل سلول‌ها = ${NumberFormatter.formatWithCommas(totalPerMl, 0)} سلول/mL ($totalMillionsStr میلیون/mL)\n")
+            append("• درصد زیست‌پذیری (Viability) = ($finalLive ÷ ${total.coerceAtLeast(1)}) × ۱۰۰ = ${NumberFormatter.formatWithCommas(viabilityPct, 1)}%")
+        }
 
         val fullReport = buildString {
             if (customAiSummary.isNotBlank()) {
                 append(customAiSummary.trim())
                 append("\n")
             }
-            append("• کل سلول‌های شناسایی‌شده از روی عکس اصلی: $total سلول ($finalLive زنده سبز | $finalDead مرده قرمز)\n")
-            append("• خطوط شبکه نئوبار شناسایی‌شده: ${detectedGrid.verticalLines.size} خط عمودی و ${detectedGrid.horizontalLines.size} خط افقی (${detectedGrid.detectedSmallSquares} خانه کوچک)\n")
-            append("• سلول‌های واقع روی خطوط نئوبار: $onLineCount سلول | سلول‌های روی‌هم‌افتاده/خوشه‌ای تفکیک‌شده: $overlapCount سلول\n")
-            append("• محاسبه نهایی کانت زنده: $viableMillionsStr میلیون در میلی‌لیتر (${NumberFormatter.formatWithCommas(viablePerMl, 0)} سلول/mL) | کل: $totalMillionsStr میلیون/mL | زیست‌پذیری: ${NumberFormatter.formatWithCommas(viabilityPct, 1)}%")
+            append("• کل سلول‌های شمارش‌شده: $total سلول ($finalLive زنده سبز | $finalDead مرده قرمز)\n")
+            append("• خطوط شبکه نئوبار تشخیص‌داده‌شده: ${detectedGrid.verticalLines.size} خط عمودی و ${detectedGrid.horizontalLines.size} خط افقی\n")
+            append("• سلول‌های روی خطوط نئوبار: $onLineCount سلول | سلول‌های روی‌هم‌افتاده: $overlapCount سلول\n")
+            append("• کانت نهایی زنده: $viableMillionsStr میلیون در میلی‌لیتر (${NumberFormatter.formatWithCommas(viablePerMl, 0)} سلول/mL) | زیست‌پذیری: ${NumberFormatter.formatWithCommas(viabilityPct, 1)}%")
         }
 
         _imageCounterState.update { state ->
             state.copy(
-                markers = markers,
+                markers = visibleMarkers,
+                allAiMarkers = allAiMarkers,
                 detectedGrid = detectedGrid,
                 showFullScreenEditor = openFullScreen,
-                imageSourceLabel = "$sourceTitle ($total سلول | $onLineCount روی خط | $overlapCount روی‌هم)",
+                imageSourceLabel = "$sourceTitle ($total سلول)",
                 aiAnalysisState = AiCellAnalysisUiState.Success(
                     summary = fullReport,
                     liveCount = finalLive,
@@ -1198,1160 +1997,27 @@ class CellCalculatorViewModel : ViewModel() {
                     gridLinesDetected = detectedGrid.totalLinesCount,
                     viableConcentrationPerMl = viablePerMl,
                     totalConcentrationPerMl = totalPerMl,
-                    viabilityPercent = viabilityPct
+                    viabilityPercent = viabilityPct,
+                    grid4x4Live = grid4x4Live,
+                    grid4x4Dead = grid4x4Dead,
+                    concentrationFormulaPersian = formulaPersian,
+                    executedPythonCode = technicalDetails,
+                    codeExecutionOutput = technicalOutput
                 )
             )
         }
     }
 
-    private fun fuseGeminiAndOpticalDetections(
-        bitmap: Bitmap,
-        baseCandidates: List<DetectedCellCandidate>,
-        detectedGrid: DetectedNeubauerGrid,
-        aiPoints: List<Triple<Float, Float, Boolean>>,
-        aiLiveCount: Int,
-        aiDeadCount: Int,
-        brightCenterLive: Boolean
-    ): List<CellPointMarker> {
-        val merged = ArrayList<DetectedCellCandidate>(baseCandidates.size + 16)
-        merged.addAll(baseCandidates)
-
-        // If Gemini localized additional cells directly on the image that weren't in baseCandidates,
-        // verify their local optical contrast on the original bitmap and add them if they correspond to a real cell
-        if (aiPoints.isNotEmpty()) {
-            val gridW = 384
-            val gridH = 384
-            val scaled = Bitmap.createScaledBitmap(bitmap, gridW, gridH, true)
-            val pixels = IntArray(gridW * gridH)
-            scaled.getPixels(pixels, 0, gridW, 0, 0, gridW, gridH)
-            val luma = FloatArray(gridW * gridH)
-            for (i in pixels.indices) {
-                val px = pixels[i]
-                val r = ((px shr 16) and 0xFF).toFloat()
-                val g = ((px shr 8) and 0xFF).toFloat()
-                val b = (px and 0xFF).toFloat()
-                luma[i] = (0.299f * r + 0.587f * g + 0.114f * b) / 255f
-            }
-
-            for ((ax, ay, aiIsLive) in aiPoints) {
-                val alreadyMatched = merged.any { existing ->
-                    hypot(existing.normalizedX - ax, existing.normalizedY - ay) < 0.018f
-                }
-                if (!alreadyMatched) {
-                    val px = (ax * gridW).toInt().coerceIn(10, gridW - 11)
-                    val py = (ay * gridH).toInt().coerceIn(10, gridH - 11)
-                    // Snap to strongest local cell contrast within +/- 3px on original bitmap
-                    var bestX = px
-                    var bestY = py
-                    var bestContrast = 0f
-                    var localBg = 0f
-                    var bgCount = 0
-                    for (dy in -6..6 step 3) {
-                        for (dx in -6..6 step 3) {
-                            if (abs(dx) >= 5 || abs(dy) >= 5) {
-                                localBg += luma[(py + dy) * gridW + (px + dx)]
-                                bgCount++
-                            }
-                        }
-                    }
-                    val bgMean = if (bgCount > 0) localBg / bgCount else 0.5f
-                    if (bgMean > 0.38f) {
-                        for (dy in -3..3) {
-                            for (dx in -3..3) {
-                                val cx = px + dx
-                                val cy = py + dy
-                                val cVal = luma[cy * gridW + cx]
-                                val ringMin = minOf(
-                                    luma[(cy - 2) * gridW + cx],
-                                    luma[(cy + 2) * gridW + cx],
-                                    luma[cy * gridW + cx - 2],
-                                    luma[cy * gridW + cx + 2]
-                                )
-                                val contrast = (cVal - ringMin) + abs(cVal - bgMean)
-                                if (contrast > bestContrast && (bgMean - ringMin) > 0.022f) {
-                                    bestContrast = contrast
-                                    bestX = cx
-                                    bestY = cy
-                                }
-                            }
-                        }
-                        if (bestContrast > 0.075f) {
-                            val snappedNx = (bestX + 0.5f) / gridW.toFloat()
-                            val snappedNy = (bestY + 0.5f) / gridH.toFloat()
-                            if (merged.none { hypot(it.normalizedX - snappedNx, it.normalizedY - snappedNy) < 0.012f }) {
-                                val onLine = isPointNearNeubauerGridLine(snappedNx, snappedNy, detectedGrid)
-                                merged.add(
-                                    DetectedCellCandidate(
-                                        normalizedX = snappedNx,
-                                        normalizedY = snappedNy,
-                                        blobScore = bestContrast,
-                                        viabilityScore = if (aiIsLive) 0.25f else -0.25f,
-                                        defaultIsLive = aiIsLive,
-                                        isOnGridLine = onLine,
-                                        isOverlapping = false
-                                    )
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if (merged.isEmpty()) return emptyList()
-
-        // Re-evaluate overlapping/touching cluster membership across all fused cells
-        val finalFlags = markOverlappingAndGridLineCells(merged, detectedGrid)
-
-        val aiTotal = (aiLiveCount.coerceAtLeast(0) + aiDeadCount.coerceAtLeast(0))
-        if (aiTotal <= 0 || brightCenterLive) {
-            return finalFlags.map { cand ->
-                CellPointMarker(
-                    id = nextMarkerId++,
-                    normalizedX = cand.normalizedX,
-                    normalizedY = cand.normalizedY,
-                    isLive = cand.defaultIsLive,
-                    isOnGridLine = cand.isOnGridLine,
-                    isOverlapping = cand.isOverlapping
-                )
-            }
-        }
-
-        val aiDeadRatio = (aiDeadCount.coerceAtLeast(0).toFloat() / aiTotal.toFloat()).coerceIn(0f, 1f)
-        val localDeadCount = finalFlags.count { !it.defaultIsLive }
-        val targetDeadCount = kotlin.math.round(finalFlags.size * aiDeadRatio).toInt()
-            .coerceIn(localDeadCount, (localDeadCount + 2).coerceAtMost(finalFlags.size))
-        val targetLiveCount = (finalFlags.size - targetDeadCount).coerceAtLeast(0)
-
-        val rankedByViability = finalFlags.sortedBy { it.viabilityScore }
-        val liveSet = rankedByViability.take(targetLiveCount).toSet()
-        return finalFlags.map { cand ->
-            CellPointMarker(
-                id = nextMarkerId++,
-                normalizedX = cand.normalizedX,
-                normalizedY = cand.normalizedY,
-                isLive = cand in liveSet,
-                isOnGridLine = cand.isOnGridLine,
-                isOverlapping = cand.isOverlapping
-            )
-        }
-    }
-
-    /**
-     * Automatic microscope cell detection pipeline (`autoDetectCellsFromImage`):
-     * 1. Grayscale conversion (luminance extraction)
-     * 2. 3x3 edge-preserving Median noise reduction filter
-     * 3. Robust percentile Histogram Normalization (compensating for low-light microscope illumination)
-     * 4. Tile-based Contrast Limited Adaptive Histogram Equalization (CLAHE) with bilinear interpolation
-     * 5. Automatic Neubauer Grid-Line Detection (vertical & horizontal ridges)
-     * 6. Direct Live & Dead Cell Detection (including cells sitting ON grid lines and overlapping/touching cell clusters)
-     * 7. Automatic Final Cell Count Calculation
-     */
     fun autoDetectCellsFromImage(
         bitmap: Bitmap,
-        sourceLabel: String = "تصویر بارگذاری‌شده توسط کاربر",
-        openFullScreen: Boolean = true
+        sourceLabel: String = "آنالیز تصویر لام نئوبار",
+        @Suppress("UNUSED_PARAMETER") openFullScreen: Boolean = true
     ) {
-        lastAnalyzedBitmap = bitmap
-        val sensitivity = _imageCounterState.value.detectionSensitivity.coerceIn(0.15f, 0.98f)
-        val analysis = analyzeFullSlideDirectly(bitmap, sensitivity)
-        val accepted = analysis.candidates.map { cand ->
-            CellPointMarker(
-                id = nextMarkerId++,
-                normalizedX = cand.normalizedX,
-                normalizedY = cand.normalizedY,
-                isLive = cand.defaultIsLive,
-                isOnGridLine = cand.isOnGridLine,
-                isOverlapping = cand.isOverlapping
-            )
-        }
-
-        publishFullSlideAnalysisState(
-            markers = accepted,
-            detectedGrid = analysis.detectedGrid,
-            sourceTitle = sourceLabel,
-            customAiSummary = "",
-            openFullScreen = openFullScreen
-        )
+        analyzeSlideWithSelectedEngine(bitmap, sourceLabel)
     }
 
-    fun analyzeBitmapForCells(bitmap: Bitmap, sourceLabel: String = "تصویر بارگذاری‌شده توسط کاربر") {
-        autoDetectCellsFromImage(bitmap, sourceLabel)
-    }
-
-    /**
-     * Preprocesses the microscope image prior to cell counting:
-     * 1. Converts RGB pixels to normalized grayscale luminance [0..1]
-     * 2. Applies a 3x3 edge-preserving Median filter to suppress sensor / impulse noise while preserving 1-2px cell cores
-     * 3. Applies robust Histogram Normalization across the illuminated ocular region to recover low-light slides
-     * 4. Applies Tile-based CLAHE (Contrast Limited Adaptive Histogram Equalization, 8x8 tiles with bilinear interpolation)
-     *    adaptively weighted to boost local cell membrane contrast especially in low-light or shadowed microscope regions
-     */
-    private fun preprocessMicroscopeImageWithClahe(
-        pixels: IntArray,
-        gridW: Int,
-        gridH: Int,
-        outLuma: FloatArray,
-        outBlueExcess: FloatArray
-    ): Float {
-        val totalPixels = gridW * gridH
-        val rawGray = FloatArray(totalPixels)
-
-        // Step 1: Grayscale conversion + chromatic Trypan-blue excess extraction
-        var centerLumaSum = 0.0
-        var centerPixels = 0
-        for (y in 0 until gridH) {
-            val rowOffset = y * gridW
-            val inCenterY = y in (gridH / 4)..(gridH * 3 / 4)
-            for (x in 0 until gridW) {
-                val idx = rowOffset + x
-                val px = pixels[idx]
-                val r = ((px shr 16) and 0xFF).toFloat()
-                val g = ((px shr 8) and 0xFF).toFloat()
-                val b = (px and 0xFF).toFloat()
-                val gray = (0.299f * r + 0.587f * g + 0.114f * b) / 255f
-                rawGray[idx] = gray
-                outBlueExcess[idx] = (b - 0.65f * r - 0.35f * g) / 255f
-                if (inCenterY && x in (gridW / 4)..(gridW * 3 / 4)) {
-                    centerLumaSum += gray.toDouble()
-                    centerPixels++
-                }
-            }
-        }
-
-        val rawMeanCenterLuma = if (centerPixels > 0) (centerLumaSum / centerPixels).toFloat() else 0.5f
-
-        // Step 2: 3x3 Median filter for noise reduction (impulse-eliminating & refractile-core preserving)
-        val denoisedGray = FloatArray(totalPixels)
-        val window9 = FloatArray(9)
-        for (y in 0 until gridH) {
-            val rowOffset = y * gridW
-            if (y == 0 || y == gridH - 1) {
-                for (x in 0 until gridW) {
-                    denoisedGray[rowOffset + x] = rawGray[rowOffset + x]
-                }
-                continue
-            }
-            denoisedGray[rowOffset] = rawGray[rowOffset]
-            denoisedGray[rowOffset + gridW - 1] = rawGray[rowOffset + gridW - 1]
-
-            val rPrev = (y - 1) * gridW
-            val rCurr = rowOffset
-            val rNext = (y + 1) * gridW
-            for (x in 1 until gridW - 1) {
-                window9[0] = rawGray[rPrev + x - 1]
-                window9[1] = rawGray[rPrev + x]
-                window9[2] = rawGray[rPrev + x + 1]
-                window9[3] = rawGray[rCurr + x - 1]
-                window9[4] = rawGray[rCurr + x]
-                window9[5] = rawGray[rCurr + x + 1]
-                window9[6] = rawGray[rNext + x - 1]
-                window9[7] = rawGray[rNext + x]
-                window9[8] = rawGray[rNext + x + 1]
-                window9.sort()
-
-                val median = window9[4]
-                val centerVal = rawGray[rCurr + x]
-                val isIsolatedImpulse = centerVal > window9[7] + 0.035f || centerVal < window9[1] - 0.035f
-                denoisedGray[rCurr + x] = if (isIsolatedImpulse) {
-                    median
-                } else {
-                    (centerVal * 0.80f + median * 0.20f)
-                }
-            }
-        }
-
-        // Step 3: Global Histogram Normalization over the active microscope field (ignoring dark vignette < 0.16f)
-        val globalHist = IntArray(256)
-        var activeCount = 0
-        for (i in 0 until totalPixels) {
-            val v = denoisedGray[i]
-            if (v >= 0.16f) {
-                val bin = (v * 255f).toInt().coerceIn(0, 255)
-                globalHist[bin]++
-                activeCount++
-            }
-        }
-
-        val normGray = FloatArray(totalPixels)
-        if (activeCount > 256) {
-            val lowTarget = (activeCount * 0.02f).toInt()
-            val highTarget = (activeCount * 0.99f).toInt()
-            var cum = 0
-            var pLowBin = 0
-            var pHighBin = 255
-            for (b in 0..255) {
-                cum += globalHist[b]
-                if (cum <= lowTarget) pLowBin = b
-                if (cum >= highTarget) {
-                    pHighBin = b
-                    break
-                }
-            }
-            val pLow = pLowBin / 255f
-            val pHigh = pHighBin / 255f
-            val span = pHigh - pLow
-            val normStrength = when {
-                rawMeanCenterLuma < 0.45f -> 0.70f
-                span < 0.45f -> 0.50f
-                else -> 0.12f
-            }
-            if (span > 0.08f) {
-                for (i in 0 until totalPixels) {
-                    val v = denoisedGray[i]
-                    val stretched = ((v - pLow) / span).coerceIn(0f, 1f)
-                    normGray[i] = (v * (1f - normStrength) + stretched * normStrength).coerceIn(0f, 1f)
-                }
-            } else {
-                System.arraycopy(denoisedGray, 0, normGray, 0, totalPixels)
-            }
-        } else {
-            System.arraycopy(denoisedGray, 0, normGray, 0, totalPixels)
-        }
-
-        // Step 4: CLAHE (Contrast Limited Adaptive Histogram Equalization)
-        val tilesX = 8
-        val tilesY = 8
-        val tileW = gridW / tilesX
-        val tileH = gridH / tilesY
-        val numBins = 64
-        val tileCdfs = Array(tilesX * tilesY) { FloatArray(numBins) }
-        val tileHist = FloatArray(numBins)
-
-        for (ty in 0 until tilesY) {
-            val yStart = ty * tileH
-            val yEnd = if (ty == tilesY - 1) gridH else (yStart + tileH)
-            for (tx in 0 until tilesX) {
-                val xStart = tx * tileW
-                val xEnd = if (tx == tilesX - 1) gridW else (xStart + tileW)
-                tileHist.fill(0f)
-
-                var count = 0
-                for (y in yStart until yEnd) {
-                    val rOff = y * gridW
-                    for (x in xStart until xEnd) {
-                        val v = normGray[rOff + x]
-                        val bin = (v * (numBins - 1)).toInt().coerceIn(0, numBins - 1)
-                        tileHist[bin] += 1f
-                        count++
-                    }
-                }
-
-                val clipLimit = maxOf(2.0f, 2.2f * (count.toFloat() / numBins.toFloat()))
-                var excess = 0f
-                for (b in 0 until numBins) {
-                    if (tileHist[b] > clipLimit) {
-                        excess += (tileHist[b] - clipLimit)
-                        tileHist[b] = clipLimit
-                    }
-                }
-                val redistrib = excess / numBins.toFloat()
-                var cdfAcc = 0f
-                val cdfArr = tileCdfs[ty * tilesX + tx]
-                val denom = maxOf(1f, count.toFloat())
-                for (b in 0 until numBins) {
-                    tileHist[b] += redistrib
-                    cdfAcc += tileHist[b]
-                    cdfArr[b] = (cdfAcc / denom).coerceIn(0f, 1f)
-                }
-            }
-        }
-
-        val baseClaheAlpha = when {
-            rawMeanCenterLuma < 0.38f -> 0.42f
-            rawMeanCenterLuma < 0.50f -> 0.25f
-            else -> 0.08f
-        }
-
-        var enhancedCenterSum = 0.0
-        var enhancedCenterCount = 0
-        for (y in 0 until gridH) {
-            val rowOffset = y * gridW
-            val inCenterY = y in (gridH / 4)..(gridH * 3 / 4)
-            val fy = (y - tileH * 0.5f) / tileH.toFloat()
-            val ty0 = kotlin.math.floor(fy).toInt().coerceIn(0, tilesY - 1)
-            val ty1 = (ty0 + 1).coerceIn(0, tilesY - 1)
-            val wy = (fy - ty0).coerceIn(0f, 1f)
-
-            for (x in 0 until gridW) {
-                val idx = rowOffset + x
-                val v = normGray[idx]
-                if (v < 0.28f) {
-                    outLuma[idx] = v
-                    continue
-                }
-
-                val fx = (x - tileW * 0.5f) / tileW.toFloat()
-                val tx0 = kotlin.math.floor(fx).toInt().coerceIn(0, tilesX - 1)
-                val tx1 = (tx0 + 1).coerceIn(0, tilesX - 1)
-                val wx = (fx - tx0).coerceIn(0f, 1f)
-
-                val bin = (v * (numBins - 1)).toInt().coerceIn(0, numBins - 1)
-                val c00 = tileCdfs[ty0 * tilesX + tx0][bin]
-                val c10 = tileCdfs[ty0 * tilesX + tx1][bin]
-                val c01 = tileCdfs[ty1 * tilesX + tx0][bin]
-                val c11 = tileCdfs[ty1 * tilesX + tx1][bin]
-
-                val top = c00 * (1f - wx) + c10 * wx
-                val bot = c01 * (1f - wx) + c11 * wx
-                val claheVal = top * (1f - wy) + bot * wy
-
-                val localDimBoost = if (v < 0.52f) 0.06f else 0f
-                val alpha = (baseClaheAlpha + localDimBoost).coerceIn(0f, 0.48f)
-                val finalLuma = (v * (1f - alpha) + claheVal * alpha).coerceIn(0f, 1f)
-                outLuma[idx] = finalLuma
-
-                if (inCenterY && x in (gridW / 4)..(gridW * 3 / 4)) {
-                    enhancedCenterSum += finalLuma.toDouble()
-                    enhancedCenterCount++
-                }
-            }
-        }
-
-        return if (enhancedCenterCount > 0) {
-            (enhancedCenterSum / enhancedCenterCount).toFloat()
-        } else {
-            rawMeanCenterLuma
-        }
-    }
-
-    /**
-     * Directly detects the vertical and horizontal Neubauer hemocytometer grid lines from the microscope image
-     * by computing 1D local ridge projections across the illuminated chamber field.
-     */
-    private fun detectNeubauerGridLines(
-        luma: FloatArray,
-        gridW: Int,
-        gridH: Int
-    ): DetectedNeubauerGrid {
-        val vertResponse = FloatArray(gridW)
-        val horizResponse = FloatArray(gridH)
-
-        // Vertical line profile across x
-        for (x in 18 until gridW - 18) {
-            var ridgeSum = 0f
-            var validRows = 0
-            for (y in (gridH / 6) until (gridH * 5 / 6) step 2) {
-                val row = y * gridW
-                val leftBg = luma[row + x - 10]
-                val rightBg = luma[row + x + 10]
-                if (leftBg < 0.36f || rightBg < 0.36f) continue
-                val bgRef = 0.5f * (leftBg + rightBg)
-                val peak = maxOf(luma[row + x - 1], luma[row + x], luma[row + x + 1])
-                val diff = peak - bgRef
-                if (diff > 0.020f) {
-                    ridgeSum += diff
-                }
-                validRows++
-            }
-            if (validRows >= 25) {
-                vertResponse[x] = ridgeSum / validRows.toFloat()
-            }
-        }
-
-        // Horizontal line profile across y
-        for (y in 16 until gridH - 16) {
-            val row = y * gridW
-            var ridgeSum = 0f
-            var validCols = 0
-            for (x in (gridW / 6) until (gridW * 5 / 6) step 2) {
-                val topBg = luma[(y - 10) * gridW + x]
-                val botBg = luma[(y + 10) * gridW + x]
-                if (topBg < 0.36f || botBg < 0.36f) continue
-                val bgRef = 0.5f * (topBg + botBg)
-                val peak = maxOf(luma[(y - 1) * gridW + x], luma[row + x], luma[(y + 1) * gridW + x])
-                val diff = peak - bgRef
-                if (diff > 0.020f) {
-                    ridgeSum += diff
-                }
-                validCols++
-            }
-            if (validCols >= 25) {
-                horizResponse[y] = ridgeSum / validCols.toFloat()
-            }
-        }
-
-        fun pickLinePeaks(profile: FloatArray, length: Int, minSpacingPx: Int): List<Float> {
-            val smoothed = FloatArray(length)
-            for (i in 4 until length - 4) {
-                var sum = 0f
-                for (d in -3..3) sum += profile[i + d]
-                smoothed[i] = sum / 7f
-            }
-            val candidates = ArrayList<Pair<Int, Float>>()
-            for (i in 16 until length - 16) {
-                val v = smoothed[i]
-                if (v < 0.011f) continue
-                var isLocalMax = true
-                for (d in -8..8) {
-                    if (d != 0 && smoothed[i + d] > v) {
-                        isLocalMax = false
-                        break
-                    }
-                }
-                if (isLocalMax) {
-                    candidates.add(i to v)
-                }
-            }
-            candidates.sortByDescending { it.second }
-            val picked = ArrayList<Int>()
-            for ((idx, _) in candidates) {
-                if (picked.size >= 6) break
-                if (picked.none { abs(it - idx) < minSpacingPx }) {
-                    picked.add(idx)
-                }
-            }
-            picked.sort()
-            return picked.map { (it + 0.5f) / length.toFloat() }
-        }
-
-        val vLines = pickLinePeaks(vertResponse, gridW, minSpacingPx = 46)
-        val hLines = pickLinePeaks(horizResponse, gridH, minSpacingPx = 46)
-
-        val finalV = if (vLines.size >= 3) vLines else listOf(0.11f, 0.308f, 0.498f, 0.678f, 0.858f)
-        val finalH = if (hLines.size >= 3) hLines else listOf(0.065f, 0.285f, 0.502f, 0.704f, 0.902f)
-        val smallSquares = ((finalV.size - 1).coerceAtLeast(1) * (finalH.size - 1).coerceAtLeast(1)).coerceIn(1, 16)
-
-        return DetectedNeubauerGrid(
-            verticalLines = finalV,
-            horizontalLines = finalH,
-            detectedSmallSquares = smallSquares,
-            detectedLargeSquares = 1
-        )
-    }
-
-    private fun isPointNearNeubauerGridLine(
-        nx: Float,
-        ny: Float,
-        grid: DetectedNeubauerGrid,
-        threshold: Float = 0.020f
-    ): Boolean {
-        val nearVert = grid.verticalLines.any { abs(it - nx) <= threshold }
-        val nearHoriz = grid.horizontalLines.any { abs(it - ny) <= threshold }
-        return nearVert || nearHoriz
-    }
-
-    private fun markOverlappingAndGridLineCells(
-        candidates: List<DetectedCellCandidate>,
-        detectedGrid: DetectedNeubauerGrid
-    ): List<DetectedCellCandidate> {
-        return candidates.mapIndexed { idx, cand ->
-            val hasTouchingNeighbor = candidates.indices.any { otherIdx ->
-                if (otherIdx == idx) false
-                else {
-                    val other = candidates[otherIdx]
-                    hypot(cand.normalizedX - other.normalizedX, cand.normalizedY - other.normalizedY) <= 0.021f
-                }
-            }
-            val onLine = cand.isOnGridLine || isPointNearNeubauerGridLine(cand.normalizedX, cand.normalizedY, detectedGrid, 0.020f)
-            cand.copy(
-                isOnGridLine = onLine,
-                isOverlapping = cand.isOverlapping || hasTouchingNeighbor
-            )
-        }
-    }
-
-    private fun analyzeFullSlideDirectly(
-        bitmap: Bitmap,
-        sensitivity: Float
-    ): FullSlideAnalysisResult {
-        val gridW = 384
-        val gridH = 384
-        val scaled = Bitmap.createScaledBitmap(bitmap, gridW, gridH, true)
-        val pixels = IntArray(gridW * gridH)
-        scaled.getPixels(pixels, 0, gridW, 0, 0, gridW, gridH)
-
-        val luma = FloatArray(gridW * gridH)
-        val blueExcess = FloatArray(gridW * gridH)
-
-        // Apply preprocessing pipeline: Grayscale -> 3x3 Median Denoising -> Histogram Normalization -> CLAHE
-        val meanCenterLuma = preprocessMicroscopeImageWithClahe(
-            pixels = pixels,
-            gridW = gridW,
-            gridH = gridH,
-            outLuma = luma,
-            outBlueExcess = blueExcess
-        )
-        val clampedSens = sensitivity.coerceIn(0.15f, 0.98f)
-        val detectedGrid = detectNeubauerGridLines(luma, gridW, gridH)
-
-        // If background is dark (< 0.30, e.g. synthetic dark-field / fluorescence slide), use dark-field blob detector
-        if (meanCenterLuma < 0.30f) {
-            val darkCandidates = extractDarkFieldCellCandidates(luma, blueExcess, gridW, gridH, clampedSens)
-            return FullSlideAnalysisResult(
-                candidates = markOverlappingAndGridLineCells(darkCandidates, detectedGrid),
-                detectedGrid = detectedGrid
-            )
-        }
-
-        // Standard 8 radial sectors at radius 2..4 px
-        val sectorDx = arrayOf(
-            intArrayOf(0, 0, 0, -1, 1),     // 0: N
-            intArrayOf(0, 0, 0, -1, 1),     // 1: S
-            intArrayOf(-2, -3, -4, -2, -2), // 2: W
-            intArrayOf(2, 3, 4, 2, 2),      // 3: E
-            intArrayOf(-2, -3, -2, -3),     // 4: NW
-            intArrayOf(2, 3, 2, 3),         // 5: NE
-            intArrayOf(-2, -3, -2, -3),     // 6: SW
-            intArrayOf(2, 3, 2, 3)          // 7: SE
-        )
-        val sectorDy = arrayOf(
-            intArrayOf(-2, -3, -4, -2, -2), // 0: N
-            intArrayOf(2, 3, 4, 2, 2),      // 1: S
-            intArrayOf(0, 0, 0, -1, 1),     // 2: W
-            intArrayOf(0, 0, 0, -1, 1),     // 3: E
-            intArrayOf(-2, -2, -3, -3),     // 4: NW
-            intArrayOf(-2, -2, -3, -3),     // 5: NE
-            intArrayOf(2, 2, 3, 3),         // 6: SW
-            intArrayOf(2, 2, 3, 3)          // 7: SE
-        )
-
-        // Compact 8 radial sectors at radius 1.5..3 px for smaller cells and overlapping lobes
-        val sectorSmallDx = arrayOf(
-            intArrayOf(0, 0, -1, 1),        // 0: N
-            intArrayOf(0, 0, -1, 1),        // 1: S
-            intArrayOf(-2, -3, -2, -2),     // 2: W
-            intArrayOf(2, 3, 2, 2),         // 3: E
-            intArrayOf(-1, -2, -2),         // 4: NW
-            intArrayOf(1, 2, 2),            // 5: NE
-            intArrayOf(-1, -2, -2),         // 6: SW
-            intArrayOf(1, 2, 2)             // 7: SE
-        )
-        val sectorSmallDy = arrayOf(
-            intArrayOf(-2, -3, -2, -2),     // 0: N
-            intArrayOf(2, 3, 2, 2),         // 1: S
-            intArrayOf(0, 0, -1, 1),        // 2: W
-            intArrayOf(0, 0, -1, 1),        // 3: E
-            intArrayOf(-2, -1, -2),         // 4: NW
-            intArrayOf(-2, -1, -2),         // 5: NE
-            intArrayOf(2, 1, 2),            // 6: SW
-            intArrayOf(2, 1, 2)             // 7: SE
-        )
-
-        val bgRingDx = intArrayOf(0, 0, -7, 7, -5, 5, -5, 5, 0, 0, -11, 11, -8, 8, -8, 8)
-        val bgRingDy = intArrayOf(-7, 7, 0, 0, -5, -5, 5, 5, -11, 11, 0, 0, -8, -8, 8, 8)
-
-        val vigGuardDx = intArrayOf(-16, 16, 0, 0, -12, 12, -12, 12)
-        val vigGuardDy = intArrayOf(0, 0, -16, 16, -12, -12, 12, 12)
-
-        val outer5Dx = intArrayOf(0, 0, -5, 5, -4, 4, -4, 4)
-        val outer5Dy = intArrayOf(-5, 5, 0, 0, -4, -4, 4, 4)
-
-        val scores = FloatArray(gridW * gridH)
-        val isLiveMap = BooleanArray(gridW * gridH) { true }
-        val isOnLineMap = BooleanArray(gridW * gridH)
-        val viabilityMap = FloatArray(gridW * gridH)
-
-        val dropThreshold = (0.112f - clampedSens * 0.072f).coerceIn(0.040f, 0.105f)
-        val moatThreshold = (0.032f - clampedSens * 0.022f).coerceIn(0.010f, 0.029f)
-        val minPeakScore = (0.132f - clampedSens * 0.082f).coerceIn(0.048f, 0.125f)
-
-        val bgVals = FloatArray(16)
-        val rawSecA = FloatArray(8)
-        val rawSecB = FloatArray(8)
-        val sectorMins = FloatArray(8)
-        val sectorSmallMins = FloatArray(8)
-        val offLineMins = FloatArray(6)
-        val outer5Vals = FloatArray(8)
-
-        val margin = 16
-        for (y in margin until gridH - margin) {
-            val row = y * gridW
-            for (x in margin until gridW - margin) {
-                // 1. Ocular vignette guard: skip pixels near the dark microscope eyepiece border
-                var nearDarkBorder = false
-                for (k in 0 until 8) {
-                    if (luma[(y + vigGuardDy[k]) * gridW + (x + vigGuardDx[k])] < 0.35f) {
-                        nearDarkBorder = true
-                        break
-                    }
-                }
-                if (nearDarkBorder) continue
-                if (x >= 22 && luma[row + x - 22] < 0.30f) continue
-                if (y >= 22 && luma[(y - 22) * gridW + x] < 0.30f) continue
-
-                // 2. Local background ring statistics (16 points at r=7..11 px)
-                var bgBlueSum = 0f
-                for (k in 0 until 16) {
-                    val bIdx = (y + bgRingDy[k]) * gridW + (x + bgRingDx[k])
-                    bgVals[k] = luma[bIdx]
-                    bgBlueSum += blueExcess[bIdx]
-                }
-                bgVals.sort()
-                val bgMin = bgVals[0]
-                val bgLow = bgVals[4]  // 25th percentile (immune to nearby bright grid lines)
-                val bgBase = bgVals[6] // 40th percentile
-                val bgMed = bgVals[8]
-                val bgHigh = bgVals[13]
-                if (bgBase < 0.43f || bgMin < 0.35f) continue
-                if (bgHigh - bgBase > 0.085f && bgMin < 0.42f) continue
-
-                val bgBlue = bgBlueSum / 16f
-                val idx = row + x
-                val c0 = luma[idx]
-                var cCore = c0
-                if (luma[idx - 1] > cCore) cCore = luma[idx - 1]
-                if (luma[idx + 1] > cCore) cCore = luma[idx + 1]
-                if (luma[idx - gridW] > cCore) cCore = luma[idx - gridW]
-                if (luma[idx + gridW] > cCore) cCore = luma[idx + gridW]
-
-                // 3. Neubauer Grid-Line Ridge Analysis at d=5, 8, 11 px
-                var nRidgeSum = 0f
-                var sRidgeSum = 0f
-                var wRidgeSum = 0f
-                var eRidgeSum = 0f
-                val ridgeOffsets = intArrayOf(5, 8, 11)
-                for (rIdx in 0 until 3) {
-                    val d = ridgeOffsets[rIdx]
-                    val nyUp = (y - d).coerceAtLeast(0) * gridW
-                    val nyDn = (y + d).coerceAtMost(gridH - 1) * gridW
-                    val nxLt = (x - d).coerceAtLeast(0)
-                    val nxRt = (x + d).coerceAtMost(gridW - 1)
-
-                    nRidgeSum += maxOf(luma[nyUp + x - 1], luma[nyUp + x], luma[nyUp + x + 1])
-                    sRidgeSum += maxOf(luma[nyDn + x - 1], luma[nyDn + x], luma[nyDn + x + 1])
-                    wRidgeSum += maxOf(luma[(y - 1) * gridW + nxLt], luma[row + nxLt], luma[(y + 1) * gridW + nxLt])
-                    eRidgeSum += maxOf(luma[(y - 1) * gridW + nxRt], luma[row + nxRt], luma[(y + 1) * gridW + nxRt])
-                }
-                val nRidge = nRidgeSum / 3f
-                val sRidge = sRidgeSum / 3f
-                val wRidge = wRidgeSum / 3f
-                val eRidge = eRidgeSum / 3f
-
-                val onVertLine = nRidge > bgBase + 0.032f && sRidge > bgBase + 0.032f
-                val onHorizLine = wRidge > bgBase + 0.032f && eRidge > bgBase + 0.032f
-
-                // Compute 8-sector membrane minimums at both scales
-                for (sec in 0 until 8) {
-                    val sDx = sectorDx[sec]
-                    val sDy = sectorDy[sec]
-                    var minVal = 1f
-                    for (m in sDx.indices) {
-                        val v = luma[(y + sDy[m]) * gridW + (x + sDx[m])]
-                        if (v < minVal) minVal = v
-                    }
-                    rawSecA[sec] = minVal
-                    sectorMins[sec] = minVal
-
-                    val smDx = sectorSmallDx[sec]
-                    val smDy = sectorSmallDy[sec]
-                    var minSmVal = 1f
-                    for (m in smDx.indices) {
-                        val v = luma[(y + smDy[m]) * gridW + (x + smDx[m])]
-                        if (v < minSmVal) minSmVal = v
-                    }
-                    rawSecB[sec] = minSmVal
-                    sectorSmallMins[sec] = minSmVal
-                }
-                sectorMins.sort()
-                sectorSmallMins.sort()
-
-                if (!onVertLine && !onHorizLine) {
-                    // 4A. Interior Cell Detection (off grid lines)
-                    val ring6thA = sectorMins[5]
-                    val ring7thA = sectorMins[6]
-                    val dropA = cCore - ring6thA
-                    val moatA = bgBase - ring6thA
-                    val validA = ring7thA < cCore - 0.038f &&
-                        ring7thA < bgMed + 0.015f &&
-                        dropA > dropThreshold &&
-                        moatA > moatThreshold
-
-                    val ring6thB = sectorSmallMins[5]
-                    val ring7thB = sectorSmallMins[6]
-                    val dropB = cCore - ring6thB
-                    val moatB = bgBase - ring6thB
-                    val validB = ring7thB < cCore - 0.038f &&
-                        ring7thB < bgMed + 0.015f &&
-                        dropB > dropThreshold &&
-                        moatB > moatThreshold
-
-                    if ((validA || validB) && cCore > bgBase - 0.02f) {
-                        val scoreA = if (validA) (dropA * 0.65f + moatA * 0.95f + maxOf(0f, cCore - bgBase) * 0.35f) else 0f
-                        val scoreB = if (validB) (dropB * 0.65f + moatB * 0.95f + maxOf(0f, cCore - bgBase) * 0.35f) else 0f
-                        val bestScore = maxOf(scoreA, scoreB)
-                        val bestDrop = maxOf(dropA, dropB)
-                        val bestMoat = maxOf(moatA, moatB)
-
-                        scores[idx] = bestScore
-
-                        val headroom = maxOf(0.15f, 1.0f - bgLow)
-                        val normPeak = (cCore - bgLow) / headroom
-                        val relBlue = blueExcess[idx] - bgBlue
-                        val isDarkBlotch = (c0 < bgBase - 0.06f) || ((cCore - bgBase) < 0.045f && bestMoat > 0.06f)
-                        val isLive = (normPeak >= 0.16f) && (bestDrop >= 0.085f) && (relBlue < 0.065f) && !isDarkBlotch
-
-                        isLiveMap[idx] = isLive
-                        isOnLineMap[idx] = false
-                        viabilityMap[idx] = normPeak + bestDrop * 0.5f - maxOf(0f, relBlue) * 2.0f
-                    }
-                } else if (onVertLine xor onHorizLine) {
-                    // 4B. Cells Sitting Directly ON a Neubauer Grid Line:
-                    // Distinguishes true cells sitting on a grid line from bare lines or tiny glass etch specks:
-                    // - All 6 off-line sectors (4 diagonals + 2 perpendiculars) must have a genuine circular dark membrane moat
-                    // - Along the line itself (N/S for vertical, W/E for horizontal), the cell's dark membrane ring must dip below the bright ridge
-                    var offIdx = 0
-                    for (sec in 0 until 8) {
-                        val isLineAxis = if (onVertLine) (sec == 0 || sec == 1) else (sec == 2 || sec == 3)
-                        if (!isLineAxis) {
-                            offLineMins[offIdx++] = minOf(rawSecA[sec], rawSecB[sec])
-                        }
-                    }
-                    offLineMins.sort()
-                    val offLine5th = offLineMins[4]
-                    val offLine6th = offLineMins[5]
-                    val lineAxisMin = if (onVertLine) {
-                        maxOf(minOf(rawSecA[0], rawSecB[0]), minOf(rawSecA[1], rawSecB[1]))
-                    } else {
-                        maxOf(minOf(rawSecA[2], rawSecB[2]), minOf(rawSecA[3], rawSecB[3]))
-                    }
-                    val ridgeRef = if (onVertLine) maxOf(nRidge, sRidge) else maxOf(wRidge, eRidge)
-
-                    val dropOffLine = cCore - offLine5th
-                    val moatOffLine = bgLow - offLine5th
-                    val dipAcrossLine = ridgeRef - lineAxisMin
-
-                    // A real cell on a grid line has a wide circular dark membrane ring extending into the chamber on both sides of the line
-                    // AND cuts across the bright grid line (dipAcrossLine > 0.055f)
-                    if (offLine6th < bgLow - 0.025f &&
-                        dropOffLine > dropThreshold * 1.35f &&
-                        moatOffLine > moatThreshold * 1.45f &&
-                        dipAcrossLine > 0.055f &&
-                        cCore > ridgeRef - 0.015f
-                    ) {
-                        val lineCellScore = dropOffLine * 0.60f + moatOffLine * 0.85f + dipAcrossLine * 0.50f
-                        scores[idx] = lineCellScore
-                        val headroom = maxOf(0.15f, 1.0f - bgLow)
-                        val normPeak = (cCore - bgLow) / headroom
-                        val relBlue = blueExcess[idx] - bgBlue
-                        val isLive = (normPeak >= 0.16f) && (relBlue < 0.065f)
-                        isLiveMap[idx] = isLive
-                        isOnLineMap[idx] = true
-                        viabilityMap[idx] = normPeak + dropOffLine * 0.4f - maxOf(0f, relBlue) * 2.0f
-                    }
-                }
-
-                // 5. Check Dead / Trypan-blue dark-core circular cell (compact dark cell body surrounded by chamber background)
-                if (!onVertLine && !onHorizLine && c0 < bgBase - 0.080f && (bgHigh - bgBase) < 0.050f) {
-                    for (k in 0 until 8) {
-                        outer5Vals[k] = luma[(y + outer5Dy[k]) * gridW + (x + outer5Dx[k])]
-                    }
-                    outer5Vals.sort()
-                    if (outer5Vals[7] < bgMed + 0.028f) {
-                        val coreMean = (c0 + luma[idx - 1] + luma[idx + 1] + luma[idx - gridW] + luma[idx + gridW]) * 0.2f
-                        val darkContrast = outer5Vals[1] - coreMean
-                        if (darkContrast > 0.075f) {
-                            val relBlue = maxOf(0f, blueExcess[idx] - bgBlue)
-                            val dScore = darkContrast + relBlue * 0.6f
-                            if (dScore > scores[idx]) {
-                                scores[idx] = dScore
-                                isLiveMap[idx] = false
-                                viabilityMap[idx] = -darkContrast - relBlue
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        data class RawPeak(
-            val x: Int,
-            val y: Int,
-            val score: Float,
-            val viabilityScore: Float,
-            val isLive: Boolean,
-            val isOnLine: Boolean
-        )
-        val livePeaks = ArrayList<RawPeak>(256)
-        val deadPeaks = ArrayList<RawPeak>(128)
-
-        // Use a 3x3 local peak window so closely overlapping/touching cell doublets (2.2..3.5 px apart) produce distinct peaks
-        for (y in margin until gridH - margin) {
-            val row = y * gridW
-            for (x in margin until gridW - margin) {
-                val idx = row + x
-                val s = scores[idx]
-                if (s < minPeakScore) continue
-
-                var isMax = true
-                for (dy in -1..1) {
-                    val rOff = (y + dy) * gridW
-                    for (dx in -1..1) {
-                        if (dx == 0 && dy == 0) continue
-                        if (scores[rOff + x + dx] > s) {
-                            isMax = false
-                            break
-                        }
-                    }
-                    if (!isMax) break
-                }
-                if (isMax) {
-                    val peak = RawPeak(
-                        x = x,
-                        y = y,
-                        score = s,
-                        viabilityScore = viabilityMap[idx],
-                        isLive = isLiveMap[idx],
-                        isOnLine = isOnLineMap[idx]
-                    )
-                    if (peak.isLive) {
-                        livePeaks.add(peak)
-                    } else {
-                        deadPeaks.add(peak)
-                    }
-                }
-            }
-        }
-
-        // Two-stage NMS with Overlapping / Touching Doublet Saddle Verification:
-        livePeaks.sortByDescending { it.score }
-        val accepted = ArrayList<DetectedCellCandidate>(minOf(livePeaks.size + deadPeaks.size, 600))
-
-        for (peak in livePeaks) {
-            if (accepted.size >= 600) break
-            val nx = (peak.x + 0.5f) / gridW.toFloat()
-            val ny = (peak.y + 0.5f) / gridH.toFloat()
-
-            var blockedBySameCell = false
-            var isOverlappingPartner = false
-            for (existing in accepted) {
-                val exPx = existing.normalizedX * gridW - 0.5f
-                val exPy = existing.normalizedY * gridH - 0.5f
-                val dist = hypot(exPx - peak.x, exPy - peak.y)
-                if (dist < 2.15f) {
-                    blockedBySameCell = true
-                    break
-                } else if (dist < 3.75f) {
-                    // Check if there is a membrane dip / saddle between the two close peaks (overlapping doublet!)
-                    val midX = ((exPx + peak.x) * 0.5f).toInt().coerceIn(1, gridW - 2)
-                    val midY = ((exPy + peak.y) * 0.5f).toInt().coerceIn(1, gridH - 2)
-                    val l1 = luma[exPy.toInt().coerceIn(0, gridH - 1) * gridW + exPx.toInt().coerceIn(0, gridW - 1)]
-                    val l2 = luma[peak.y * gridW + peak.x]
-                    val lMid = luma[midY * gridW + midX]
-                    val sMid = scores[midY * gridW + midX]
-                    val hasSaddleDip = (lMid < minOf(l1, l2) - 0.015f) || (sMid < minOf(existing.blobScore, peak.score) * 0.84f)
-                    if (hasSaddleDip && peak.score >= minPeakScore * 1.05f) {
-                        isOverlappingPartner = true
-                    } else {
-                        blockedBySameCell = true
-                        break
-                    }
-                } else if (dist <= 6.8f) {
-                    isOverlappingPartner = true
-                }
-            }
-
-            if (!blockedBySameCell) {
-                val nearGridLine = peak.isOnLine || isPointNearNeubauerGridLine(nx, ny, detectedGrid, 0.020f)
-                accepted.add(
-                    DetectedCellCandidate(
-                        normalizedX = nx,
-                        normalizedY = ny,
-                        blobScore = peak.score,
-                        viabilityScore = peak.viabilityScore,
-                        defaultIsLive = true,
-                        isOnGridLine = nearGridLine,
-                        isOverlapping = isOverlappingPartner
-                    )
-                )
-            }
-        }
-
-        // Secondary Figure-8 / Tightly Overlapping Doublet Lobe Deconvolver:
-        // When two cells overlap closely, 2-3 sectors of the second lobe face the first cell's bright core.
-        // We inspect the r=2.3..4.5 px ring around each accepted cell for a secondary refractile core with >=5 of 8 dark sectors.
-        val additionalDoubletLobes = ArrayList<DetectedCellCandidate>()
-        for (parent in accepted) {
-            val px = (parent.normalizedX * gridW).toInt().coerceIn(margin, gridW - margin - 1)
-            val py = (parent.normalizedY * gridH).toInt().coerceIn(margin, gridH - margin - 1)
-            val parentLuma = luma[py * gridW + px]
-            var bestLobeX = -1
-            var bestLobeY = -1
-            var bestLobeScore = 0f
-
-            for (dy in -4..4) {
-                for (dx in -4..4) {
-                    val dist = hypot(dx.toFloat(), dy.toFloat())
-                    if (dist < 2.2f || dist > 4.6f) continue
-                    val cx = px + dx
-                    val cy = py + dy
-                    val cVal = luma[cy * gridW + cx]
-                    if (cVal < 0.52f) continue
-
-                    // Require a darker membrane waist / saddle between parent and secondary lobe
-                    val midX = px + dx / 2
-                    val midY = py + dy / 2
-                    val midVal = luma[midY * gridW + midX]
-                    if (midVal >= minOf(parentLuma, cVal) - 0.016f) continue
-
-                    // Check if (cx, cy) has a dark membrane ring in at least 5 of 8 sectors (since 2-3 sectors face the parent cell)
-                    for (sec in 0 until 8) {
-                        val smDx = sectorSmallDx[sec]
-                        val smDy = sectorSmallDy[sec]
-                        var minSmVal = 1f
-                        for (m in smDx.indices) {
-                            val v = luma[(cy + smDy[m]) * gridW + (cx + smDx[m])]
-                            if (v < minSmVal) minSmVal = v
-                        }
-                        sectorSmallMins[sec] = minSmVal
-                    }
-                    sectorSmallMins.sort()
-                    val ring5th = sectorSmallMins[4]
-                    val drop5 = cVal - ring5th
-                    if (drop5 > dropThreshold * 1.10f && drop5 > bestLobeScore) {
-                        val nx = (cx + 0.5f) / gridW.toFloat()
-                        val ny = (cy + 0.5f) / gridH.toFloat()
-                        val alreadyCovered = accepted.any { existing ->
-                            existing !== parent && hypot((existing.normalizedX - nx) * gridW, (existing.normalizedY - ny) * gridH) < 2.8f
-                        } || additionalDoubletLobes.any { existing ->
-                            hypot((existing.normalizedX - nx) * gridW, (existing.normalizedY - ny) * gridH) < 2.8f
-                        }
-                        if (!alreadyCovered) {
-                            bestLobeScore = drop5
-                            bestLobeX = cx
-                            bestLobeY = cy
-                        }
-                    }
-                }
-            }
-
-            if (bestLobeX >= 0 && bestLobeY >= 0) {
-                val nx = (bestLobeX + 0.5f) / gridW.toFloat()
-                val ny = (bestLobeY + 0.5f) / gridH.toFloat()
-                val nearLine = isPointNearNeubauerGridLine(nx, ny, detectedGrid, 0.020f)
-                additionalDoubletLobes.add(
-                    DetectedCellCandidate(
-                        normalizedX = nx,
-                        normalizedY = ny,
-                        blobScore = bestLobeScore,
-                        viabilityScore = parent.viabilityScore,
-                        defaultIsLive = true,
-                        isOnGridLine = nearLine,
-                        isOverlapping = true
-                    )
-                )
-            }
-        }
-        accepted.addAll(additionalDoubletLobes)
-
-        // Stage 2: Accept Dead peaks only if >= 6.5px away from any Live cell and >= 3.8px from other Dead cells
-        deadPeaks.sortByDescending { it.score }
-        for (peak in deadPeaks) {
-            if (accepted.size >= 600) break
-            val nx = (peak.x + 0.5f) / gridW.toFloat()
-            val ny = (peak.y + 0.5f) / gridH.toFloat()
-            val tooClose = accepted.any { existing ->
-                val dx = (existing.normalizedX - nx) * gridW
-                val dy = (existing.normalizedY - ny) * gridH
-                val minDist = if (existing.defaultIsLive) 6.5f else 3.8f
-                hypot(dx, dy) < minDist
-            }
-            if (!tooClose) {
-                val nearLine = peak.isOnLine || isPointNearNeubauerGridLine(nx, ny, detectedGrid, 0.020f)
-                accepted.add(
-                    DetectedCellCandidate(
-                        normalizedX = nx,
-                        normalizedY = ny,
-                        blobScore = peak.score,
-                        viabilityScore = peak.viabilityScore,
-                        defaultIsLive = false,
-                        isOnGridLine = nearLine,
-                        isOverlapping = false
-                    )
-                )
-            }
-        }
-
-        val finalCandidates = markOverlappingAndGridLineCells(accepted, detectedGrid)
-        return FullSlideAnalysisResult(
-            candidates = finalCandidates,
-            detectedGrid = detectedGrid
-        )
-    }
-
-    private fun extractCellCandidates(
-        bitmap: Bitmap,
-        sensitivity: Float
-    ): List<DetectedCellCandidate> {
-        return analyzeFullSlideDirectly(bitmap, sensitivity).candidates
-    }
-
-    private fun extractDarkFieldCellCandidates(
-        luma: FloatArray,
-        blueExcess: FloatArray,
-        gridW: Int,
-        gridH: Int,
-        clampedSens: Float
-    ): List<DetectedCellCandidate> {
-        val scores = FloatArray(gridW * gridH)
-        val isLiveMap = BooleanArray(gridW * gridH) { true }
-        val viabilityMap = FloatArray(gridW * gridH)
-        val ringDx = intArrayOf(0, 0, -7, 7, -5, 5, -5, 5)
-        val ringDy = intArrayOf(-7, 7, 0, 0, -5, -5, 5, 5)
-        val bgVals = FloatArray(8)
-
-        val margin = 10
-        for (y in margin until gridH - margin) {
-            val row = y * gridW
-            for (x in margin until gridW - margin) {
-                val idx = row + x
-                for (k in 0 until 8) {
-                    bgVals[k] = luma[(y + ringDy[k]) * gridW + (x + ringDx[k])]
-                }
-                bgVals.sort()
-                val bgMed = bgVals[3]
-                val c0 = luma[idx]
-                val diff = c0 - bgMed
-                val bEx = blueExcess[idx]
-                if (diff > 0.08f) {
-                    scores[idx] = diff
-                    isLiveMap[idx] = diff > 0.25f && bEx < 0.12f
-                    viabilityMap[idx] = if (isLiveMap[idx]) diff else -diff
-                } else if (bEx > 0.08f && abs(diff) > 0.025f) {
-                    scores[idx] = bEx
-                    isLiveMap[idx] = false
-                    viabilityMap[idx] = -bEx
-                }
-            }
-        }
-
-        val threshold = (0.14f - clampedSens * 0.08f).coerceIn(0.05f, 0.15f)
-        val accepted = ArrayList<DetectedCellCandidate>()
-        for (y in margin until gridH - margin) {
-            val row = y * gridW
-            for (x in margin until gridW - margin) {
-                val s = scores[row + x]
-                if (s < threshold) continue
-                var isMax = true
-                for (dy in -3..3) {
-                    val rOff = (y + dy) * gridW
-                    for (dx in -3..3) {
-                        if (dx == 0 && dy == 0) continue
-                        if (scores[rOff + x + dx] > s) {
-                            isMax = false
-                            break
-                        }
-                    }
-                    if (!isMax) break
-                }
-                if (isMax) {
-                    val nx = (x + 0.5f) / gridW.toFloat()
-                    val ny = (y + 0.5f) / gridH.toFloat()
-                    if (accepted.none { hypot((it.normalizedX - nx) * gridW, (it.normalizedY - ny) * gridH) < 5.5f }) {
-                        accepted.add(
-                            DetectedCellCandidate(
-                                normalizedX = nx,
-                                normalizedY = ny,
-                                blobScore = s,
-                                viabilityScore = viabilityMap[row + x],
-                                defaultIsLive = isLiveMap[row + x]
-                            )
-                        )
-                    }
-                }
-            }
-        }
-        return accepted
+    fun analyzeBitmapForCells(bitmap: Bitmap, sourceLabel: String = "آنالیز تصویر لام نئوبار") {
+        analyzeSlideWithSelectedEngine(bitmap, sourceLabel)
     }
 
     fun updateImageDilutionFactor(raw: String) {
@@ -2515,7 +2181,7 @@ class CellCalculatorViewModel : ViewModel() {
     fun resetNeubauerCounts() {
         _neubauerState.update { state ->
             state.copy(
-                squares = state.squares.map { it.copy(liveCountText = "0", deadCountText = "0") }
+                squares = state.squares.map { it.copy(liveCountText = "", deadCountText = "") }
             )
         }
     }
@@ -2573,10 +2239,12 @@ class CellCalculatorViewModel : ViewModel() {
     fun selectVesselPreset(preset: CultureVesselPreset) {
         _seedingState.update { state ->
             val rawCellsPerWell = preset.defaultTargetCellsPerWellMillion * 1_000_000.0
+            val preferredVolUnit = if (preset.isBioreactor) VolumeUnit.L else VolumeUnit.ML
             state.copy(
                 selectedPreset = preset,
                 wellCountText = preset.defaultWellCount.toString(),
-                volumePerWellText = NumberFormatter.formatClean(state.volumePerWellUnit.fromMl(preset.defaultMediaPerWellMl), 4),
+                volumePerWellUnit = preferredVolUnit,
+                volumePerWellText = NumberFormatter.formatClean(preferredVolUnit.fromMl(preset.defaultMediaPerWellMl), 4),
                 targetCellsPerWellText = NumberFormatter.formatCountForUnit(rawCellsPerWell, state.targetCellsPerWellUnit)
             )
         }
@@ -2641,5 +2309,167 @@ class CellCalculatorViewModel : ViewModel() {
 
     fun deleteSavedRecord(id: Long) {
         _savedRecords.update { list -> list.filterNot { it.id == id } }
+    }
+
+    // =========================================================================
+    // TAB 6: CELL GROWTH & CONFLUENCY PREDICTOR (پیش‌بینی رشد سلول و کانفلوئنسی)
+    // =========================================================================
+
+    fun selectGrowthVesselPreset(preset: CultureVesselPreset) {
+        _growthState.update { state ->
+            val defaultN0Raw = preset.defaultTargetCellsPerWellMillion * 1_000_000.0
+            val defaultKRaw = preset.maxConfluentCellsMillion * 1_000_000.0
+            state.copy(
+                selectedVessel = preset,
+                initialCellsText = NumberFormatter.formatCountForUnit(defaultN0Raw, state.initialCellsUnit),
+                carryingCapacityText = NumberFormatter.formatCountForUnit(defaultKRaw, state.carryingCapacityUnit)
+            )
+        }
+    }
+
+    fun selectGrowthCellLinePreset(cellLine: CellLinePreset) {
+        _growthState.update { state ->
+            state.copy(
+                selectedCellLine = cellLine,
+                doublingTimeHoursText = NumberFormatter.formatClean(cellLine.defaultDoublingTimeHours, 2),
+                lagPhaseHoursText = NumberFormatter.formatClean(cellLine.defaultLagPhaseHours, 1)
+            )
+        }
+    }
+
+    fun updateGrowthInitialCells(raw: String) {
+        _growthState.update {
+            it.copy(initialCellsText = NumberFormatter.normalizeInputString(raw))
+        }
+    }
+
+    fun toggleGrowthInitialCellsUnit() {
+        _growthState.update { state ->
+            val rawCells = state.initialCellsRaw
+            val nextUnit = state.initialCellsUnit.toggle()
+            state.copy(
+                initialCellsUnit = nextUnit,
+                initialCellsText = NumberFormatter.formatCountForUnit(rawCells, nextUnit)
+            )
+        }
+    }
+
+    fun updateGrowthCarryingCapacity(raw: String) {
+        _growthState.update {
+            it.copy(carryingCapacityText = NumberFormatter.normalizeInputString(raw))
+        }
+    }
+
+    fun toggleGrowthCarryingCapacityUnit() {
+        _growthState.update { state ->
+            val rawCells = state.carryingCapacityRaw
+            val nextUnit = state.carryingCapacityUnit.toggle()
+            state.copy(
+                carryingCapacityUnit = nextUnit,
+                carryingCapacityText = NumberFormatter.formatCountForUnit(rawCells, nextUnit)
+            )
+        }
+    }
+
+    fun updateGrowthDoublingTime(raw: String) {
+        _growthState.update {
+            it.copy(
+                selectedCellLine = CellLinePreset.CUSTOM,
+                doublingTimeHoursText = NumberFormatter.normalizeInputString(raw)
+            )
+        }
+    }
+
+    fun updateGrowthLagPhase(raw: String) {
+        _growthState.update {
+            it.copy(lagPhaseHoursText = NumberFormatter.normalizeInputString(raw))
+        }
+    }
+
+    fun updateGrowthIncubationHours(raw: String) {
+        _growthState.update {
+            it.copy(incubationHoursText = NumberFormatter.normalizeInputString(raw))
+        }
+    }
+
+    fun updateGrowthTargetConfluency(raw: String) {
+        _growthState.update {
+            it.copy(targetConfluencyPercentText = NumberFormatter.normalizeInputString(raw))
+        }
+    }
+
+    fun toggleGrowthResultCountUnit() {
+        _growthState.update { state ->
+            state.copy(resultCountUnit = state.resultCountUnit.toggle())
+        }
+    }
+
+    fun updateEmpiricalN1(raw: String) {
+        _growthState.update {
+            it.copy(empiricalN1Text = NumberFormatter.normalizeInputString(raw))
+        }
+    }
+
+    fun updateEmpiricalN2(raw: String) {
+        _growthState.update {
+            it.copy(empiricalN2Text = NumberFormatter.normalizeInputString(raw))
+        }
+    }
+
+    fun updateEmpiricalElapsedHours(raw: String) {
+        _growthState.update {
+            it.copy(empiricalElapsedHoursText = NumberFormatter.normalizeInputString(raw))
+        }
+    }
+
+    fun toggleEmpiricalCountUnit() {
+        _growthState.update { state ->
+            val n1Raw = state.empiricalN1Raw
+            val n2Raw = state.empiricalN2Raw
+            val nextUnit = state.empiricalCountUnit.toggle()
+            state.copy(
+                empiricalCountUnit = nextUnit,
+                empiricalN1Text = NumberFormatter.formatCountForUnit(n1Raw, nextUnit),
+                empiricalN2Text = NumberFormatter.formatCountForUnit(n2Raw, nextUnit)
+            )
+        }
+    }
+
+    fun applyEmpiricalDoublingTimeToPredictor() {
+        _growthState.update { state ->
+            val td = state.calculatedEmpiricalDoublingTimeHours
+            if (td <= 0.0) return@update state
+            state.copy(
+                selectedCellLine = CellLinePreset.CUSTOM,
+                doublingTimeHoursText = NumberFormatter.formatClean(td, 2)
+            )
+        }
+    }
+
+    fun importSeedingToGrowthPredictor() {
+        val seeding = _seedingState.value
+        val preset = seeding.selectedPreset
+        val n0Raw = seeding.targetCellsPerWellRaw
+        val kRaw = preset.maxConfluentCellsMillion * 1_000_000.0
+        _growthState.update { state ->
+            state.copy(
+                selectedVessel = preset,
+                initialCellsText = NumberFormatter.formatCountForUnit(n0Raw, state.initialCellsUnit),
+                carryingCapacityText = NumberFormatter.formatCountForUnit(kRaw, state.carryingCapacityUnit)
+            )
+        }
+        _selectedTab.value = AppTab.GROWTH_PREDICTOR
+    }
+
+    fun saveGrowthPredictionToHistory() {
+        val g = _growthState.value
+        val record = SavedCalculationRecord(
+            id = nextRecordId++,
+            title = "پیش‌بینی رشد سلول (${g.selectedCellLine.shortName} در ${g.selectedVessel.title})",
+            summary = "پس از ${NumberFormatter.formatWithCommas(g.incubationHours, 1)} ساعت: ${NumberFormatter.formatCountForUnitWithCommas(g.predictedLogisticCellsRaw, g.resultCountUnit)} (${g.resultCountUnit.shortLabel}) | کانفلوئنسی: ${NumberFormatter.formatWithCommas(g.predictedConfluencyPercent, 1)}٪",
+            details = "کشت اولیه: ${NumberFormatter.formatCountForUnitWithCommas(g.initialCellsRaw, g.initialCellsUnit)} (${g.initialCellsUnit.shortLabel}) | زمان دو برابر شدن: ${NumberFormatter.formatWithCommas(g.doublingTimeHours, 1)} ساعت | رسیدن به ${NumberFormatter.formatWithCommas(g.targetConfluencyPercent, 0)}٪ کانفلوئنسی: ${NumberFormatter.formatWithCommas(g.hoursToTargetConfluencyLogistic, 1)} ساعت",
+            timestampLabel = "پیش‌بینی رشد ذخیره‌شده"
+        )
+        _savedRecords.update { listOf(record) + it }
     }
 }

@@ -5,10 +5,11 @@
 
     <!-- Navigation Tabs -->
     <string name="tab_dilution">رقت و سرم</string>
-    <string name="tab_mixer">میکس سلولی</string>
-    <string name="tab_image_counter">شمارش با عکس</string>
-    <string name="tab_hemocytometer">لام نئوبار</string>
-    <string name="tab_seeding">پلیت و تاریخچه</string>
+    <string name="tab_mixer">میکس</string>
+    <string name="tab_image_counter">شمارش عکس</string>
+    <string name="tab_hemocytometer">نئوبار</string>
+    <string name="tab_growth">رشد سلول</string>
+    <string name="tab_seeding">پلیت</string>
 
     <!-- Dilution & Serum Screen -->
     <string name="dilution_header_title">محاسبه‌گر دوطرفه کانت، مدیا و سرم</string>

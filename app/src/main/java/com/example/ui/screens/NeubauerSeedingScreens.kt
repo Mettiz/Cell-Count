@@ -512,6 +512,7 @@ fun SeedingAndHistoryScreen(
     onSerumPercentChanged: (String) -> Unit,
     onOverfillPercentChanged: (String) -> Unit,
     onDeleteRecord: (Long) -> Unit,
+    onOpenGrowthPredictor: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
@@ -647,6 +648,17 @@ fun SeedingAndHistoryScreen(
                         testTag = "seeding_overfill_pct",
                         modifier = Modifier.weight(1f)
                     )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedButton(
+                    onClick = onOpenGrowthPredictor,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("btn_seeding_to_growth_predictor")
+                ) {
+                    Text("پیش‌بینی رشد سلول و زمان رسیدن به کانفلوئنسی برای این کشت")
                 }
             }
         }

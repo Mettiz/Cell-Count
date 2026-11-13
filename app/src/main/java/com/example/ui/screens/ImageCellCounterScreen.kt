@@ -1,7 +1,14 @@
 package com.example.ui.screens
 
+import android.content.ContentValues
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas as AndroidCanvas
+import android.graphics.DashPathEffect
+import android.graphics.Paint as AndroidPaint
+import android.provider.MediaStore
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -14,6 +21,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -94,6 +102,7 @@ import com.example.model.AiModelOption
 import com.example.model.CellMarkerTool
 import com.example.model.CellPointMarker
 import com.example.model.CountUnitMultiplier
+import com.example.model.CountingEngineMode
 import com.example.model.DetectedNeubauerGrid
 import com.example.model.ImageCounterState
 import com.example.model.NumberFormatter
@@ -120,7 +129,9 @@ import androidx.compose.ui.window.DialogProperties
 fun ImageCellCounterScreen(
     state: ImageCounterState,
     onSelectTool: (CellMarkerTool) -> Unit,
+    onSelectCountingEngine: (CountingEngineMode) -> Unit = {},
     onSelectAiModel: (AiModelOption) -> Unit = {},
+    onToggleDeepQuadrantScan: () -> Unit = {},
     onToggleGrid: () -> Unit,
     onOpenFullScreenEditor: () -> Unit = {},
     onCloseFullScreenEditor: () -> Unit = {},
@@ -452,11 +463,11 @@ fun ImageCellCounterScreen(
             }
         }
 
-        // 2. Interactive Microscope / Slide Image Card + Gemini AI Vision
+        // 2. Interactive Microscope / Slide Image Card + CountThings OpenCV / Gemini Engine
         item {
             ImageSectionCard(
-                title = "آنالیز کامل تصویر لام نئوبار با هوش مصنوعی و پردازش مستقیم",
-                subtitle = "تشخیص مستقیم کل سلول‌ها، زنده، مرده، خطوط لام نئوبار، سلول‌های روی خط، سلول‌های روی‌هم‌افتاده و محاسبه کانت نهایی",
+                title = "شمارشگر دقیق لام نئوبار (سبک CountThings • آفلاین)",
+                subtitle = "پردازش بینایی ماشین OpenCV روی گوشی (بدون محدودیت سهمیه) به همراه تطبیق الگوی لمسی و گزینه اختیاری Gemini",
                 icon = Icons.Filled.AutoAwesome
             ) {
                 // Image Source Buttons (Gallery & Camera only — Sample removed per user request)
@@ -501,7 +512,7 @@ fun ImageCellCounterScreen(
                     }
                 }
 
-                // AI Engine Selector Row (Gemini 4 Argon / Gemini 3.8 Flash)
+                // Counting Engine Mode Selector (CountThings OpenCV Offline vs Gemini AI Cloud)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -510,40 +521,139 @@ fun ImageCellCounterScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "مدل هوش مصنوعی:",
+                        text = "موتور شمارش:",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    AiModelOption.entries.forEach { modelOption ->
+                    CountingEngineMode.entries.forEach { engineMode ->
                         FilterChip(
-                            selected = state.selectedAiModel == modelOption,
+                            selected = state.countingEngineMode == engineMode,
                             onClick = {
-                                onSelectAiModel(modelOption)
+                                onSelectCountingEngine(engineMode)
                                 selectedBitmap?.let { bmp ->
-                                    onAnalyzeBitmapWithAi(bmp, "آنالیز با ${modelOption.shortBadge}")
+                                    if (engineMode == CountingEngineMode.OPENCV_COUNTTHINGS) {
+                                        onAnalyzeBitmapWithAi(bmp, "آنالیز آفلاین CountThings (OpenCV)")
+                                    }
                                 }
                             },
                             label = {
                                 Text(
-                                    text = modelOption.displayName,
+                                    text = engineMode.title,
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold
                                 )
                             },
                             leadingIcon = {
                                 Icon(
-                                    imageVector = Icons.Filled.AutoAwesome,
+                                    imageVector = if (engineMode == CountingEngineMode.OPENCV_COUNTTHINGS) {
+                                        Icons.Filled.CheckCircle
+                                    } else {
+                                        Icons.Filled.AutoAwesome
+                                    },
                                     contentDescription = null,
                                     modifier = Modifier.size(16.dp)
                                 )
                             },
-                            modifier = Modifier.testTag("ai_model_chip_${modelOption.name}")
+                            modifier = Modifier.testTag("engine_mode_chip_${engineMode.name}")
                         )
                     }
                 }
 
-                // Dedicated Gemini AI Analysis Button + Full-Screen Editor Button
+                if (state.countingEngineMode == CountingEngineMode.OPENCV_COUNTTHINGS) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        color = ViableGreen.copy(alpha = 0.09f),
+                        border = BorderStroke(1.dp, ViableGreen.copy(alpha = 0.30f))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "حالت CountThings (آفلاین و آنی با OpenCV 4.11):",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = ViableGreen
+                            )
+                            Text(
+                                text = "• حذف خودکار خطوط و تقاطع‌های شبکه نئوبار، تشخیص تقارن ۳۶۰° سلول زنده، تفکیک توده‌ها با Distance Transform، و قابلیت لمس ۱ سلول نمونه (Tap-to-Template) بدون نیاز به اینترنت یا سهمیه.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                } else {
+                    // AI Engine Selector Row (Gemini 3.8 Flash / Gemini 4 Argon / Flash-Lite)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "مدل هوش مصنوعی:",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        AiModelOption.entries.forEach { modelOption ->
+                            FilterChip(
+                                selected = state.selectedAiModel == modelOption,
+                                onClick = {
+                                    onSelectAiModel(modelOption)
+                                    selectedBitmap?.let { bmp ->
+                                        onAnalyzeBitmapWithAi(bmp, "آنالیز با ${modelOption.shortBadge}")
+                                    }
+                                },
+                                label = {
+                                    Text(
+                                        text = modelOption.displayName,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.AutoAwesome,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                modifier = Modifier.testTag("ai_model_chip_${modelOption.name}")
+                            )
+                        }
+                    }
+
+                    // Scan Mode Toggle: Unified 1-Request (Free Tier safe) vs Deep 4-Quadrant 2x Zoom Scan
+                    FilterChip(
+                        selected = state.deepQuadrantScanEnabled,
+                        onClick = onToggleDeepQuadrantScan,
+                        label = {
+                            Text(
+                                text = if (state.deepQuadrantScanEnabled) {
+                                    "اسکن عمیق ۴ ناحیه‌ای ۲× (۵ درخواست • نیازمند سهمیه بالا)"
+                                } else {
+                                    "اسکن هوشمند یک‌مرحله‌ای (۱ درخواست • مناسب حساب رایگان)"
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.ZoomIn,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        modifier = Modifier.testTag("toggle_deep_quadrant_scan_chip")
+                    )
+                }
+
+                // Primary Slide Analysis Button + Full-Screen Editor Button
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -576,7 +686,7 @@ fun ImageCellCounterScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "در حال آنالیز کامل عکس...",
+                                text = "در حال شمارش و پردازش...",
                                 fontWeight = FontWeight.Bold
                             )
                         } else {
@@ -587,7 +697,12 @@ fun ImageCellCounterScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (selectedBitmap != null) "آنالیز مجدد و ویرایش تمام‌صفحه" else "انتخاب و آنالیز هوشمند عکس",
+                                text = when {
+                                    selectedBitmap == null -> "انتخاب عکس و شمارش فوری"
+                                    state.countingEngineMode == CountingEngineMode.OPENCV_COUNTTHINGS ->
+                                        "شمارش خودکار CountThings (آفلاین)"
+                                    else -> "شمارش مجدد با هوش مصنوعی"
+                                },
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -629,7 +744,7 @@ fun ImageCellCounterScreen(
                                     strokeWidth = 2.5.dp
                                 )
                                 Text(
-                                    text = "در حال آنالیز مستقیم عکس اصلی: تشخیص کل سلول‌ها، زنده و مرده، خطوط نئوبار، سلول‌های روی خط و روی‌هم‌افتاده و محاسبه کانت...",
+                                    text = aiState.statusText,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
@@ -637,17 +752,25 @@ fun ImageCellCounterScreen(
                         }
                     }
                     is AiCellAnalysisUiState.Success -> {
+                        var showTechnicalDetails by remember { mutableStateOf(false) }
+                        val liveGrid4x4 = remember(state.markers, state.detectedGrid) {
+                            state.computeGrid4x4Counts(isLiveFilter = true)
+                        }
+                        val deadGrid4x4 = remember(state.markers, state.detectedGrid) {
+                            state.computeGrid4x4Counts(isLiveFilter = false)
+                        }
+
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("gemini_ai_success_banner"),
-                            shape = RoundedCornerShape(12.dp),
-                            color = ViableGreen.copy(alpha = 0.12f),
-                            border = BorderStroke(1.dp, ViableGreen.copy(alpha = 0.4f))
+                            shape = RoundedCornerShape(14.dp),
+                            color = ViableGreen.copy(alpha = 0.10f),
+                            border = BorderStroke(1.dp, ViableGreen.copy(alpha = 0.42f))
                         ) {
                             Column(
                                 modifier = Modifier.padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -659,18 +782,190 @@ fun ImageCellCounterScreen(
                                         tint = ViableGreen,
                                         modifier = Modifier.size(16.dp)
                                     )
+                                    val headerBannerTitle = if (state.countingEngineMode == CountingEngineMode.OPENCV_COUNTTHINGS) {
+                                        "گزارش شمارش سبک CountThings (OpenCV آفلاین):"
+                                    } else {
+                                        "گزارش آنالیز دقیق هوش مصنوعی ${state.selectedAiModel.shortBadge} (دما = ۰):"
+                                    }
                                     Text(
-                                        text = "گزارش آنالیز کامل عکس و محاسبه کانت:",
+                                        text = headerBannerTitle,
                                         style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = ViableGreen
                                     )
                                 }
+
+                                // 1. 4x4 Neubauer Sub-Square Table (جدول ۴ در ۴ خانه‌های لام نئوبار)
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("neubauer_4x4_table_card"),
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = "جدول ۴ در ۴ خانه‌های کوچک لام نئوبار (زنده سبز / مرده قرمز):",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                for (r in 0 until 4) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                    ) {
+                                                        for (c in 0 until 4) {
+                                                            val lCount = liveGrid4x4.getOrNull(r)?.getOrNull(c) ?: 0
+                                                            val dCount = deadGrid4x4.getOrNull(r)?.getOrNull(c) ?: 0
+                                                            val cellSum = lCount + dCount
+                                                            Surface(
+                                                                modifier = Modifier.weight(1f),
+                                                                shape = RoundedCornerShape(8.dp),
+                                                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                                                                border = BorderStroke(
+                                                                    width = 1.dp,
+                                                                    color = if (cellSum > 0) ViableGreen.copy(alpha = 0.45f)
+                                                                    else MaterialTheme.colorScheme.outlineVariant
+                                                                )
+                                                            ) {
+                                                                Column(
+                                                                    modifier = Modifier.padding(vertical = 5.dp, horizontal = 4.dp),
+                                                                    horizontalAlignment = Alignment.CenterHorizontally
+                                                                ) {
+                                                                    Text(
+                                                                        text = "R${r + 1}C${c + 1}",
+                                                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                                    )
+                                                                    Text(
+                                                                        text = "$cellSum",
+                                                                        style = MaterialTheme.typography.labelMedium.copy(
+                                                                            fontFamily = FontFamily.Monospace,
+                                                                            fontWeight = FontWeight.ExtraBold
+                                                                        ),
+                                                                        color = MaterialTheme.colorScheme.onSurface
+                                                                    )
+                                                                    Text(
+                                                                        text = "+$lCount / -$dCount",
+                                                                        style = MaterialTheme.typography.labelSmall.copy(
+                                                                            fontFamily = FontFamily.Monospace,
+                                                                            fontSize = 9.sp
+                                                                        ),
+                                                                        color = if (dCount > 0) DeadCellRed else ViableGreen
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // 2. Concentration Formula in Persian (فرمول محاسبه غلظت به فارسی)
+                                val dynamicAvgLive = state.averageLivePerSquare
+                                val dynamicViablePerMl = state.viableCellsPerMl
+                                val dynamicViableMillions = NumberFormatter.formatWithCommas(dynamicViablePerMl / 1_000_000.0, 3)
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("neubauer_formula_card"),
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(1.dp, BioIndigoPrimary.copy(alpha = 0.35f))
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = "فرمول و محاسبه غلظت سلولی (به فارسی):",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = BioIndigoPrimary
+                                        )
+                                        Text(
+                                            text = "غلظت سلول زنده (Cells/mL) = (تعداد سلول زنده ÷ تعداد خانه بزرگ) × ضریب رقت × ۱۰⁴",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "• جایگذاری: (${state.liveCount} ÷ ${NumberFormatter.formatClean(state.squaresCount, 2)}) × ${NumberFormatter.formatClean(state.dilutionFactor, 2)} × ${NumberFormatter.formatWithCommas(state.chamberFactor, 0)} = ${NumberFormatter.formatWithCommas(dynamicViablePerMl, 0)} سلول/mL ($dynamicViableMillions میلیون/mL)",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = ViableGreen,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "• درصد زیست‌پذیری (Viability): (${state.liveCount} ÷ ${state.totalCount.coerceAtLeast(1)}) × ۱۰۰ = ${NumberFormatter.formatWithCommas(state.viabilityPercent, 1)}%",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+
+                                // 3. Detailed Summary Text
                                 Text(
                                     text = aiState.summary,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
+
+                                // 4. Toggleable Technical AI Diagnostics Details
+                                if (aiState.executedPythonCode.isNotBlank()) {
+                                    OutlinedButton(
+                                        onClick = { showTechnicalDetails = !showTechnicalDetails },
+                                        shape = RoundedCornerShape(10.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                        modifier = Modifier.testTag("toggle_ai_diagnostics_btn")
+                                    ) {
+                                        Text(
+                                            text = if (showTechnicalDetails) "بستن جزئیات کالیبراسیون هوشمند" else "مشاهده جزئیات کالیبراسیون و فیلتر خطا",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    if (showTechnicalDetails) {
+                                        Surface(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = Color(0xFF0F172A)
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(10.dp),
+                                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Text(
+                                                    text = aiState.executedPythonCode,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = Color(0xFF38BDF8)
+                                                )
+                                                if (aiState.codeExecutionOutput.isNotBlank()) {
+                                                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                                                        Text(
+                                                            text = aiState.codeExecutionOutput,
+                                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                                fontFamily = FontFamily.Monospace,
+                                                                fontSize = 11.sp
+                                                            ),
+                                                            color = Color(0xFF34D399)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -683,12 +978,43 @@ fun ImageCellCounterScreen(
                             color = DeadCellRed.copy(alpha = 0.12f),
                             border = BorderStroke(1.dp, DeadCellRed.copy(alpha = 0.4f))
                         ) {
-                            Text(
-                                text = aiState.message,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = DeadCellRed,
-                                modifier = Modifier.padding(12.dp)
-                            )
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = aiState.message,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = DeadCellRed
+                                )
+                                selectedBitmap?.let { bmp ->
+                                    OutlinedButton(
+                                        onClick = {
+                                            onAnalyzeBitmapWithAi(bmp, "تلاش مجدد آنالیز هوشمند")
+                                        },
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = DeadCellRed
+                                        ),
+                                        border = BorderStroke(1.dp, DeadCellRed.copy(alpha = 0.55f)),
+                                        modifier = Modifier.testTag("retry_gemini_ai_btn")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Refresh,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "تلاش مجدد با هوش مصنوعی",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -762,6 +1088,64 @@ fun ImageCellCounterScreen(
                         },
                         modifier = Modifier.testTag("tool_erase_chip")
                     )
+
+                    FilterChip(
+                        selected = state.activeTool == CellMarkerTool.SAMPLE_TEMPLATE_LIVE,
+                        onClick = { onSelectTool(CellMarkerTool.SAMPLE_TEMPLATE_LIVE) },
+                        label = { Text("الگوی زنده (لمس ۱ سلول)", fontWeight = FontWeight.Bold) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.ZoomIn,
+                                contentDescription = null,
+                                tint = CellCyan,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = CellCyan.copy(alpha = 0.20f),
+                            selectedLabelColor = CellCyan
+                        ),
+                        modifier = Modifier.testTag("tool_sample_live_template_chip")
+                    )
+
+                    FilterChip(
+                        selected = state.activeTool == CellMarkerTool.SAMPLE_TEMPLATE_DEAD,
+                        onClick = { onSelectTool(CellMarkerTool.SAMPLE_TEMPLATE_DEAD) },
+                        label = { Text("الگوی مرده (لمس ۱ سلول)", fontWeight = FontWeight.Bold) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.ZoomIn,
+                                contentDescription = null,
+                                tint = SerumAmber,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = SerumAmber.copy(alpha = 0.20f),
+                            selectedLabelColor = SerumAmber
+                        ),
+                        modifier = Modifier.testTag("tool_sample_dead_template_chip")
+                    )
+                }
+
+                if (state.activeTool == CellMarkerTool.SAMPLE_TEMPLATE_LIVE ||
+                    state.activeTool == CellMarkerTool.SAMPLE_TEMPLATE_DEAD
+                ) {
+                    val sampleKind = if (state.activeTool == CellMarkerTool.SAMPLE_TEMPLATE_LIVE) "زنده" else "مرده"
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        color = CellCyan.copy(alpha = 0.14f),
+                        border = BorderStroke(1.dp, CellCyan.copy(alpha = 0.45f))
+                    ) {
+                        Text(
+                            text = "حالت CountThings فعال است: روی یک سلول $sampleKind واضح در تصویر ضربه بزنید تا تمام سلول‌های هم‌الگو پیدا شوند.",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                        )
+                    }
                 }
 
                 // Interactive Microscope Viewport Canvas with compact cell-sized markers & detected grid lines
@@ -839,6 +1223,34 @@ fun ImageCellCounterScreen(
                     }
                 }
 
+                // Save Annotated Image to Gallery Button
+                OutlinedButton(
+                    onClick = {
+                        val saved = saveAnnotatedSlideToGallery(context, selectedBitmap, state)
+                        Toast.makeText(
+                            context,
+                            if (saved) "عکس علامت‌گذاری‌شده با موفقیت در گالری ذخیره شد" else "خطا در ذخیره تصویر",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    enabled = state.markers.isNotEmpty() || selectedBitmap != null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("save_annotated_image_btn"),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.PhotoLibrary,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "ذخیره عکس علامت‌گذاری‌شده در گالری",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                 // Sliders for Marker Size & Auto-Detection Sensitivity (always available)
@@ -873,14 +1285,18 @@ fun ImageCellCounterScreen(
                         modifier = Modifier.testTag("marker_scale_slider")
                     )
 
-                    // 2. Local Contrast Sensitivity Slider
+                    // 2. Confidence / Template Match Threshold Filter Slider
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "حساسیت تشخیص کنتراست محلی",
+                            text = if (state.countingEngineMode == CountingEngineMode.OPENCV_COUNTTHINGS) {
+                                "آستانه حساسیت تطبیق الگو (فیلتر خطا)"
+                            } else {
+                                "آستانه اطمینان هوش مصنوعی (فیلتر خطا)"
+                            },
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold
                         )
@@ -894,9 +1310,9 @@ fun ImageCellCounterScreen(
                         )
                     }
                     Slider(
-                        value = state.detectionSensitivity,
+                        value = state.detectionSensitivity.coerceIn(0.15f, 0.95f),
                         onValueChange = onSensitivityChange,
-                        valueRange = 0.15f..0.98f,
+                        valueRange = 0.15f..0.95f,
                         modifier = Modifier.testTag("detection_sensitivity_slider")
                     )
                 }
@@ -1192,11 +1608,18 @@ private fun MicroscopeSlideCanvas(
     onOpenFullScreen: (() -> Unit)? = null
 ) {
     val imageBitmap = remember(bitmap) { bitmap?.asImageBitmap() }
+    val slideAspectRatio = remember(bitmap) {
+        if (bitmap != null && bitmap.width > 0 && bitmap.height > 0) {
+            (bitmap.width.toFloat() / bitmap.height.toFloat()).coerceIn(0.60f, 1.80f)
+        } else {
+            1f
+        }
+    }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(1f)
+            .aspectRatio(slideAspectRatio)
             .clip(RoundedCornerShape(18.dp))
             .background(Color(0xFF0E1B2A))
             .testTag("microscope_slide_canvas")
@@ -1832,6 +2255,62 @@ private fun FullScreenSlideEditorDialog(
                                 ),
                                 modifier = Modifier.testTag("fs_tool_pan_chip")
                             )
+
+                            FilterChip(
+                                selected = !isPanMode && state.activeTool == CellMarkerTool.SAMPLE_TEMPLATE_LIVE,
+                                onClick = {
+                                    isPanMode = false
+                                    onSelectTool(CellMarkerTool.SAMPLE_TEMPLATE_LIVE)
+                                },
+                                label = {
+                                    Text(
+                                        text = "الگوی زنده (CountThings)",
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.ZoomIn,
+                                        contentDescription = null,
+                                        tint = Color(0xFF38BDF8),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFF38BDF8).copy(alpha = 0.24f),
+                                    selectedLabelColor = Color(0xFF38BDF8),
+                                    labelColor = Color.White
+                                ),
+                                modifier = Modifier.testTag("fs_tool_template_live_chip")
+                            )
+
+                            FilterChip(
+                                selected = !isPanMode && state.activeTool == CellMarkerTool.SAMPLE_TEMPLATE_DEAD,
+                                onClick = {
+                                    isPanMode = false
+                                    onSelectTool(CellMarkerTool.SAMPLE_TEMPLATE_DEAD)
+                                },
+                                label = {
+                                    Text(
+                                        text = "الگوی مرده (CountThings)",
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.ZoomIn,
+                                        contentDescription = null,
+                                        tint = SerumAmber,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = SerumAmber.copy(alpha = 0.24f),
+                                    selectedLabelColor = SerumAmber,
+                                    labelColor = Color.White
+                                ),
+                                modifier = Modifier.testTag("fs_tool_template_dead_chip")
+                            )
                         }
 
                         // Row 2: Zoom Presets (1x, 1.75x, 2.5x, 3.5x) + Grid Toggle + Undo + Clear
@@ -1933,14 +2412,14 @@ private fun FullScreenSlideEditorDialog(
                             }
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "حساسیت تشخیص: ${(state.detectionSensitivity * 100).toInt()}%",
+                                    text = "آستانه اطمینان: ${(state.detectionSensitivity * 100).toInt()}%",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = Color(0xFFCBD5E1)
                                 )
                                 Slider(
-                                    value = state.detectionSensitivity,
+                                    value = state.detectionSensitivity.coerceIn(0.15f, 0.95f),
                                     onValueChange = onSensitivityChange,
-                                    valueRange = 0.15f..0.98f
+                                    valueRange = 0.15f..0.95f
                                 )
                             }
                         }
@@ -1997,47 +2476,65 @@ private fun ZoomableEditableSlideCanvas(
     onTapNormalized: (Float, Float) -> Unit
 ) {
     val imageBitmap = remember(bitmap) { bitmap?.asImageBitmap() }
+    val slideAspectRatio = remember(bitmap) {
+        if (bitmap != null && bitmap.width > 0 && bitmap.height > 0) {
+            (bitmap.width.toFloat() / bitmap.height.toFloat()).coerceIn(0.60f, 1.80f)
+        } else {
+            1f
+        }
+    }
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(1f)
-            .clip(RoundedCornerShape(18.dp))
-            .background(Color(0xFF0E1B2A))
-            .border(BorderStroke(1.5.dp, Color(0xFF334155)), RoundedCornerShape(18.dp))
-            .testTag("fullscreen_zoomable_canvas")
-            .pointerInput(zoom, panOffset, isPanMode) {
-                if (isPanMode) {
-                    detectTransformGestures { _, pan, gestureZoom, _ ->
-                        val newZoom = (zoom * gestureZoom).coerceIn(1f, 4.5f)
-                        val maxPanX = (size.width * (newZoom - 1f)) * 0.5f
-                        val maxPanY = (size.height * (newZoom - 1f)) * 0.5f
-                        val newPan = if (newZoom <= 1.01f) {
-                            Offset.Zero
-                        } else {
-                            Offset(
-                                x = (panOffset.x + pan.x).coerceIn(-maxPanX, maxPanX),
-                                y = (panOffset.y + pan.y).coerceIn(-maxPanY, maxPanY)
-                            )
+    BoxWithConstraints(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        val availW = maxWidth
+        val availH = maxHeight
+        val (boxW, boxH) = if (availW / slideAspectRatio <= availH) {
+            availW to (availW / slideAspectRatio)
+        } else {
+            (availH * slideAspectRatio) to availH
+        }
+
+        Box(
+            modifier = Modifier
+                .size(boxW, boxH)
+                .clip(RoundedCornerShape(18.dp))
+                .background(Color(0xFF0E1B2A))
+                .border(BorderStroke(1.5.dp, Color(0xFF334155)), RoundedCornerShape(18.dp))
+                .testTag("fullscreen_zoomable_canvas")
+                .pointerInput(zoom, panOffset, isPanMode) {
+                    if (isPanMode) {
+                        detectTransformGestures { _, pan, gestureZoom, _ ->
+                            val newZoom = (zoom * gestureZoom).coerceIn(1f, 4.5f)
+                            val maxPanX = (size.width * (newZoom - 1f)) * 0.5f
+                            val maxPanY = (size.height * (newZoom - 1f)) * 0.5f
+                            val newPan = if (newZoom <= 1.01f) {
+                                Offset.Zero
+                            } else {
+                                Offset(
+                                    x = (panOffset.x + pan.x).coerceIn(-maxPanX, maxPanX),
+                                    y = (panOffset.y + pan.y).coerceIn(-maxPanY, maxPanY)
+                                )
+                            }
+                            onZoomPanChange(newZoom, newPan)
                         }
-                        onZoomPanChange(newZoom, newPan)
-                    }
-                } else {
-                    detectTapGestures { tapOffset ->
-                        if (size.width > 0 && size.height > 0) {
-                            val w = size.width.toFloat()
-                            val h = size.height.toFloat()
-                            val normX = (((tapOffset.x - w * 0.5f - panOffset.x) / (w * zoom)) + 0.5f)
-                                .coerceIn(0.005f, 0.995f)
-                            val normY = (((tapOffset.y - h * 0.5f - panOffset.y) / (h * zoom)) + 0.5f)
-                                .coerceIn(0.005f, 0.995f)
-                            onTapNormalized(normX, normY)
+                    } else {
+                        detectTapGestures { tapOffset ->
+                            if (size.width > 0 && size.height > 0) {
+                                val w = size.width.toFloat()
+                                val h = size.height.toFloat()
+                                val normX = (((tapOffset.x - w * 0.5f - panOffset.x) / (w * zoom)) + 0.5f)
+                                    .coerceIn(0.005f, 0.995f)
+                                val normY = (((tapOffset.y - h * 0.5f - panOffset.y) / (h * zoom)) + 0.5f)
+                                    .coerceIn(0.005f, 0.995f)
+                                onTapNormalized(normX, normY)
+                            }
                         }
                     }
                 }
-            }
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
             val w = size.width
             val h = size.height
 
@@ -2177,7 +2674,119 @@ private fun ZoomableEditableSlideCanvas(
                 }
             }
         }
+        }
     }
 }
+
+private fun saveAnnotatedSlideToGallery(
+    context: Context,
+    sourceBitmap: Bitmap?,
+    state: ImageCounterState
+): Boolean {
+    return try {
+        val w = sourceBitmap?.width ?: 1080
+        val h = sourceBitmap?.height ?: 1080
+        val headerH = 68
+        val outBitmap = Bitmap.createBitmap(w, h + headerH, Bitmap.Config.ARGB_8888)
+        val canvas = AndroidCanvas(outBitmap)
+
+        val bgPaint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(11, 20, 34)
+            style = AndroidPaint.Style.FILL
+        }
+        canvas.drawRect(0f, 0f, w.toFloat(), (h + headerH).toFloat(), bgPaint)
+
+        if (sourceBitmap != null) {
+            canvas.drawBitmap(sourceBitmap, 0f, headerH.toFloat(), null)
+        }
+
+        val textPaint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE
+            textSize = (w * 0.022f).coerceIn(18f, 30f)
+            isFakeBoldText = true
+        }
+        val headerText = "Live: ${state.liveCount}  |  Dead: ${state.deadCount}  |  Total: ${state.totalCount}  |  Viability: ${NumberFormatter.formatWithCommas(state.viabilityPercent, 1)}%"
+        canvas.drawText(headerText, 20f, headerH * 0.62f, textPaint)
+
+        // Draw detected Neubauer grid lines
+        if (state.showGridOverlay) {
+            val gridPaint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.argb(190, 56, 189, 248)
+                style = AndroidPaint.Style.STROKE
+                strokeWidth = (w * 0.0022f).coerceAtLeast(2f)
+                pathEffect = DashPathEffect(floatArrayOf(12f, 8f), 0f)
+            }
+            state.detectedGrid.verticalLines.forEach { nx ->
+                val x = nx * w
+                canvas.drawLine(x, headerH + h * 0.03f, x, headerH + h * 0.97f, gridPaint)
+            }
+            state.detectedGrid.horizontalLines.forEach { ny ->
+                val y = headerH + ny * h
+                canvas.drawLine(w * 0.03f, y, w * 0.97f, y, gridPaint)
+            }
+        }
+
+        val radius = (w * (0.0052f + state.markerScale * 0.0115f)).coerceIn(5f, 18f)
+        val strokeW = (radius * 0.28f).coerceAtLeast(2f)
+
+        val liveRingPaint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(16, 185, 129)
+            style = AndroidPaint.Style.STROKE
+            strokeWidth = strokeW
+        }
+        val liveFillPaint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.argb(55, 16, 185, 129)
+            style = AndroidPaint.Style.FILL
+        }
+        val deadRingPaint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(239, 68, 68)
+            style = AndroidPaint.Style.STROKE
+            strokeWidth = strokeW
+        }
+        val deadFillPaint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.argb(60, 239, 68, 68)
+            style = AndroidPaint.Style.FILL
+        }
+        val onLinePaint = AndroidPaint(AndroidPaint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(245, 158, 11)
+            style = AndroidPaint.Style.STROKE
+            strokeWidth = strokeW * 0.9f
+            pathEffect = DashPathEffect(floatArrayOf(6f, 4f), 0f)
+        }
+
+        state.markers.forEach { m ->
+            val cx = m.normalizedX * w
+            val cy = headerH + m.normalizedY * h
+            if (m.isOnGridLine) {
+                canvas.drawCircle(cx, cy, radius * 1.4f, onLinePaint)
+            }
+            if (m.isLive) {
+                canvas.drawCircle(cx, cy, radius, liveFillPaint)
+                canvas.drawCircle(cx, cy, radius, liveRingPaint)
+            } else {
+                canvas.drawCircle(cx, cy, radius, deadFillPaint)
+                canvas.drawCircle(cx, cy, radius, deadRingPaint)
+                val d = radius * 0.48f
+                canvas.drawLine(cx - d, cy - d, cx + d, cy + d, deadRingPaint)
+                canvas.drawLine(cx + d, cy - d, cx - d, cy + d, deadRingPaint)
+            }
+        }
+
+        val filename = "Neubauer_CellCount_${System.currentTimeMillis()}.jpg"
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, filename)
+            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+        }
+        val resolver = context.contentResolver
+        val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return false
+        resolver.openOutputStream(uri)?.use { out ->
+            outBitmap.compress(Bitmap.CompressFormat.JPEG, 95, out)
+        }
+        true
+    } catch (_: Exception) {
+        false
+    }
+}
+
 
 
