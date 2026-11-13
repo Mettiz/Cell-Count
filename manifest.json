@@ -1,7 +1,7 @@
 {
   "name": "CellCount Lab",
   "short_name": "CellCount",
-  "description": "محاسبه‌گر هوشمند کانت سلولی، رقت مدیا، درصد سرم و میکس سلولی",
+  "description": "مجموعه کامل ۶ ماژول آزمایشگاهی کشت سلول: رقت و سرم، شمارشگر عکس CountThings، میکس، لام نئوبار، پیش‌بینی رشد (BHK و بیوراکتور) و پلیت‌ریزی",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0B2E33",

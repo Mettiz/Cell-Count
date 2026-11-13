@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#4F46E5" />
-  <title>CellCount Lab | M. Hsn | محاسبه‌گر کانت، رقت، سرم و شمارش میکروسکوپی</title>
+  <title>CellCount Lab | M. Hsn | دستیار جامع کشت سلول، شمارش عکس و بیوراکتور</title>
   <link rel="manifest" href="manifest.json" />
   <style>
     :root {
@@ -21,6 +21,7 @@
       --serum: #D97706;
       --green: #10B981;
       --red: #EF4444;
+      --amber: #F59E0B;
     }
     body.dark {
       --bg: #0B0F19;
@@ -36,79 +37,86 @@
       --serum: #FBBF24;
       --green: #34D399;
       --red: #F87171;
+      --amber: #FBBF24;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, 'Segoe UI', Tahoma, sans-serif; }
-    body { background: var(--bg); color: var(--text); min-height: 100vh; padding-bottom: 84px; transition: background 0.2s, color 0.2s; }
+    body { background: var(--bg); color: var(--text); min-height: 100vh; padding-bottom: 90px; transition: background 0.2s, color 0.2s; }
     header {
       background: var(--surface);
       border-bottom: 1px solid var(--border);
-      padding: 12px 16px;
+      padding: 10px 16px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       position: sticky;
       top: 0;
-      z-index: 20;
+      z-index: 30;
     }
     .brand { display: flex; align-items: center; gap: 10px; }
     .brand-badge {
       width: 36px; height: 36px; border-radius: 50%;
       background: var(--primary-soft); color: var(--primary);
-      display: flex; align-items: center; justify-content: center; font-weight: 800;
+      display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.9rem;
     }
     .author-pill {
       display: inline-block; background: var(--primary-soft); color: var(--primary);
-      padding: 2px 8px; border-radius: 8px; font-size: 0.75rem; font-weight: 800; margin-right: 6px;
+      padding: 2px 8px; border-radius: 8px; font-size: 0.72rem; font-weight: 800; margin-right: 4px;
     }
     .theme-btn {
       background: var(--surface-var); color: var(--text);
       border: 1px solid var(--border); border-radius: 10px;
-      padding: 7px 12px; cursor: pointer; font-weight: 700; font-size: 0.85rem;
+      padding: 7px 12px; cursor: pointer; font-weight: 700; font-size: 0.8rem;
     }
-    .container { max-width: 680px; margin: 0 auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; }
+    .container { max-width: 740px; margin: 0 auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; }
     .card {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 16px;
       padding: 14px;
     }
+    .card-title { font-weight: 800; font-size: 0.94rem; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .card-sub { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 10px; line-height: 1.5; }
     .unit-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .seg-group {
       display: flex; background: var(--surface-var); padding: 3px; border-radius: 10px; gap: 4px; margin-top: 4px;
     }
     .seg-btn {
       flex: 1; border: none; background: transparent; color: var(--text-muted);
-      padding: 6px 4px; border-radius: 8px; font-weight: 700; font-size: 0.8rem; cursor: pointer;
+      padding: 6px 4px; border-radius: 8px; font-weight: 700; font-size: 0.78rem; cursor: pointer;
     }
     .seg-btn.active { background: var(--primary); color: #fff; }
     .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    @media (max-width: 520px) {
+      .unit-bar, .grid-2 { grid-template-columns: 1fr; }
+    }
     .field { display: flex; flex-direction: column; gap: 4px; }
-    .field label { font-size: 0.8rem; font-weight: 700; display: flex; align-items: center; gap: 5px; }
-    /* Strict LTR input wrapper: Number on LEFT, Unit on RIGHT */
+    .field label { font-size: 0.78rem; font-weight: 700; display: flex; align-items: center; justify-content: space-between; gap: 5px; }
     .input-wrap {
       direction: ltr;
       display: flex; align-items: center; border: 1.5px solid var(--border);
       border-radius: 12px; background: var(--surface); overflow: hidden;
     }
-    .input-wrap input {
+    .input-wrap input, .input-wrap select {
       width: 100%; border: none; background: transparent; color: var(--text);
-      padding: 9px 10px; font-size: 1rem; font-weight: 700; outline: none;
+      padding: 9px 10px; font-size: 0.96rem; font-weight: 700; outline: none;
       direction: ltr; text-align: left; font-family: monospace;
     }
     .unit-pill {
       background: var(--surface-var); color: var(--primary); border: none;
       border-left: 1px solid var(--border); padding: 9px 8px;
-      font-size: 0.78rem; font-weight: 800; cursor: pointer; white-space: nowrap;
+      font-size: 0.76rem; font-weight: 800; cursor: pointer; white-space: nowrap;
     }
     .helper {
       direction: ltr; text-align: left;
-      font-size: 0.74rem; color: var(--text-muted); padding: 0 4px;
+      font-size: 0.72rem; color: var(--text-muted); padding: 0 4px; min-height: 15px;
     }
-    .chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-top: 6px; }
+    .chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-top: 6px; flex-wrap: nowrap; }
+    .chips-wrap { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
     .chip {
       border: 1px solid var(--border); background: var(--surface-var); color: var(--text);
-      border-radius: 99px; padding: 5px 11px; font-size: 0.78rem; font-weight: 700; cursor: pointer; white-space: nowrap;
+      border-radius: 99px; padding: 5px 11px; font-size: 0.76rem; font-weight: 700; cursor: pointer; white-space: nowrap;
     }
     .chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
     .bar-track {
@@ -117,36 +125,60 @@
     }
     .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
     .tile {
-      border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px; cursor: pointer;
-      background: var(--surface);
+      border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px; background: var(--surface);
     }
-    .tile-title { font-size: 0.75rem; color: var(--text-muted); display: flex; justify-content: space-between; }
+    .tile.clickable { cursor: pointer; }
+    .tile-title { font-size: 0.73rem; color: var(--text-muted); display: flex; justify-content: space-between; }
     .tile-val-row {
       direction: ltr; display: flex; justify-content: space-between; align-items: center;
-      margin-top: 4px; font-weight: 800; font-size: 0.96rem; font-family: monospace;
+      margin-top: 4px; font-weight: 800; font-size: 0.94rem; font-family: monospace;
+    }
+    .alert-box {
+      border-radius: 12px; padding: 10px 12px; font-size: 0.8rem; line-height: 1.5; margin-top: 8px;
+      border: 1px solid var(--amber); background: rgba(245, 158, 11, 0.12);
+    }
+    .info-box {
+      border-radius: 12px; padding: 10px 12px; font-size: 0.8rem; line-height: 1.55;
+      border: 1px solid rgba(16, 185, 129, 0.35); background: rgba(16, 185, 129, 0.08);
     }
     .nav-bar {
       position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface);
-      border-top: 1px solid var(--border); display: flex; justify-content: space-around; padding: 8px 0; z-index: 30;
+      border-top: 1px solid var(--border); display: flex; overflow-x: auto; justify-content: space-around;
+      padding: 6px 4px; z-index: 30; gap: 2px;
     }
     .nav-item {
       border: none; background: transparent; color: var(--text-muted);
-      font-size: 0.82rem; font-weight: 700; padding: 6px 12px; border-radius: 10px; cursor: pointer;
+      font-size: 0.72rem; font-weight: 700; padding: 6px 8px; border-radius: 10px;
+      cursor: pointer; white-space: nowrap; display: flex; flex-direction: column; align-items: center; gap: 2px;
     }
     .nav-item.active { background: var(--primary-soft); color: var(--primary); }
-    .hidden { display: none; }
+    .hidden { display: none !important; }
     .btn-primary {
       background: var(--primary); color: #fff; border: none; border-radius: 11px;
-      padding: 10px 14px; font-weight: 700; cursor: pointer; width: 100%; margin-top: 8px;
+      padding: 10px 14px; font-weight: 700; cursor: pointer; width: 100%; font-size: 0.85rem;
     }
     .btn-outline {
       background: var(--surface-var); color: var(--text); border: 1px solid var(--border); border-radius: 11px;
-      padding: 9px 12px; font-weight: 700; cursor: pointer; font-size: 0.82rem;
+      padding: 9px 12px; font-weight: 700; cursor: pointer; font-size: 0.8rem;
     }
-    #slideCanvas {
-      width: 100%; aspect-ratio: 1 / 1; border-radius: 14px; background: #0E1B2A;
-      cursor: crosshair; display: block; margin: 10px 0; touch-action: manipulation;
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.12); color: var(--red); border: 1px solid rgba(239, 68, 68, 0.4);
+      border-radius: 10px; padding: 6px 10px; font-weight: 700; cursor: pointer; font-size: 0.76rem;
     }
+    #slideCanvas, #growthCanvas {
+      width: 100%; border-radius: 14px; background: #0E1B2A;
+      display: block; margin: 8px 0;
+    }
+    #slideCanvas { cursor: crosshair; touch-action: manipulation; }
+    .subsq-cell {
+      border: 1px solid var(--border); border-radius: 8px; padding: 5px 2px; text-align: center;
+      background: var(--surface-var); font-family: monospace;
+    }
+    table.growth-table { width: 100%; border-collapse: collapse; font-size: 0.76rem; margin-top: 8px; }
+    table.growth-table th, table.growth-table td {
+      border-bottom: 1px solid var(--border); padding: 6px 4px; text-align: center; font-family: monospace;
+    }
+    table.growth-table th { color: var(--primary); font-family: inherit; }
   </style>
 </head>
 <body>
@@ -154,16 +186,16 @@
     <div class="brand">
       <div class="brand-badge">CC</div>
       <div>
-        <div style="font-weight:800;font-size:1rem;">
+        <div style="font-weight:800;font-size:0.98rem;">
           CellCount Lab <span class="author-pill">M. Hsn</span>
         </div>
-        <div id="themeSubtitle" style="font-size:0.74rem;color:var(--text-muted);">By M. Hsn • حالت روز فعال</div>
+        <div id="themeSubtitle" style="font-size:0.72rem;color:var(--text-muted);">نسخه جامع وب • ۶ ماژول آزمایشگاهی</div>
       </div>
     </div>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌙 حالت شب</button>
   </header>
 
-  <!-- TAB 1: DILUTION & SERUM -->
+  <!-- ==================== TAB 1: DILUTION & SERUM ==================== -->
   <div id="tab-dilution" class="container">
     <div class="card unit-bar">
       <div>
@@ -183,163 +215,216 @@
     </div>
 
     <div class="card">
-      <div style="font-weight:800;font-size:0.9rem;margin-bottom:10px;">۱. سلول فعلی و کانت / حجم هدف</div>
+      <div class="card-title">۱. استوک سلول و پارامترهای رقت (C₁V₁ = C₂V₂)</div>
+      <div class="seg-group" style="margin-bottom:8px;">
+        <button id="stockAllBtn" class="seg-btn active" onclick="setStockMode('USE_ALL')">استفاده از کل حجم فعلی (V₁)</button>
+        <button id="stockWithdrawBtn" class="seg-btn" onclick="setStockMode('WITHDRAW')">برداشت بخشی از استوک</button>
+      </div>
+      <div class="seg-group" style="margin-bottom:10px;">
+        <button id="anchorC2Btn" class="seg-btn active" onclick="setTargetAnchor('C2')">قفل کانت تارگت (C₂)</button>
+        <button id="anchorV2Btn" class="seg-btn" onclick="setTargetAnchor('V2')">قفل حجم نهایی (V₂)</button>
+      </div>
+
       <div class="grid-2">
         <div class="field">
-          <label>حجم فعلی (V₁)</label>
+          <label>حجم سلول فعلی (V₁)</label>
           <div class="input-wrap">
-            <input id="v1Input" type="text" inputmode="decimal" value="2" oninput="handleNumericInput(this, onV1Change)" />
+            <input id="v1Input" type="text" inputmode="decimal" placeholder="مقدار حجم را وارد کنید" oninput="handleNumericInput(this, onV1Change)" />
             <button id="v1UnitBtn" class="unit-pill" onclick="toggleUnit('v1')">mL ⇄</button>
           </div>
-          <div id="v1Helper" class="helper">= 0.002 L</div>
+          <div id="v1Helper" class="helper"></div>
         </div>
         <div class="field">
           <label>کانت فعلی (C₁)</label>
           <div class="input-wrap">
-            <input id="c1Input" type="text" inputmode="decimal" value="2.5" oninput="handleNumericInput(this, onC1Change)" />
+            <input id="c1Input" type="text" inputmode="decimal" placeholder="کانت استوک را وارد کنید" oninput="handleNumericInput(this, onC1Change)" />
             <button id="c1UnitBtn" class="unit-pill" onclick="toggleCountUnit('c1')">میلیون ⇄</button>
           </div>
-          <div id="c1Helper" class="helper">= 2,500,000 عدد کامل</div>
+          <div id="c1Helper" class="helper"></div>
         </div>
         <div class="field">
           <label>کانت تارگت (C₂)</label>
           <div class="input-wrap">
-            <input id="c2Input" type="text" inputmode="decimal" value="0.5" oninput="handleNumericInput(this, onC2Change)" />
+            <input id="c2Input" type="text" inputmode="decimal" placeholder="کانت هدف" oninput="handleNumericInput(this, onC2Change)" />
             <button id="c2UnitBtn" class="unit-pill" onclick="toggleCountUnit('c2')">میلیون ⇄</button>
           </div>
-          <div id="c2Helper" class="helper">= 500,000 عدد کامل</div>
+          <div id="c2Helper" class="helper"></div>
         </div>
         <div class="field">
-          <label>حجم نهایی (V₂)</label>
+          <label>حجم نهایی کل (V₂)</label>
           <div class="input-wrap">
-            <input id="v2Input" type="text" inputmode="decimal" value="10" oninput="handleNumericInput(this, onV2Change)" />
+            <input id="v2Input" type="text" inputmode="decimal" placeholder="حجم نهایی" oninput="handleNumericInput(this, onV2Change)" />
             <button id="v2UnitBtn" class="unit-pill" onclick="toggleUnit('v2')">mL ⇄</button>
           </div>
-          <div id="v2Helper" class="helper">= 0.01 L</div>
+          <div id="v2Helper" class="helper"></div>
         </div>
+      </div>
+      <div id="centrifugeWarning" class="alert-box hidden">
+        ⚠️ کانت هدف (C₂) از کانت فعلی (C₁) بیشتر است؛ برای تغلیظ باید استوک را سانتریفیوژ و رسوب را در حجم نهایی (V₂) حل کنید.
       </div>
     </div>
 
     <div class="card">
-      <div style="font-weight:800;font-size:0.9rem;margin-bottom:8px;">۲. محاسبه حجم مدیا و سرم (FBS)</div>
-      <div class="field" style="margin-bottom:8px;">
-        <label>درصد سرم (% FBS)</label>
-        <div class="input-wrap">
-          <input id="serumPctInput" type="text" inputmode="decimal" value="3" oninput="handleNumericInput(this, onSerumPctChange)" />
-          <span class="unit-pill">%</span>
+      <div class="card-title">۲. محاسبه حجم مدیا و سرم (FBS)</div>
+      <div class="seg-group" style="margin-bottom:8px;">
+        <button id="basisAddedBtn" class="seg-btn active" onclick="setSerumBasis('ADDED')">درصد از حجم اضافه‌شده (مدیا+سرم)</button>
+        <button id="basisFinalBtn" class="seg-btn" onclick="setSerumBasis('FINAL')">درصد از کل حجم نهایی (V₂)</button>
+      </div>
+      <div class="grid-2" style="margin-bottom:8px;">
+        <div class="field">
+          <label>درصد سرم مورد نظر (% FBS)</label>
+          <div class="input-wrap">
+            <input id="serumPctInput" type="text" inputmode="decimal" value="3" oninput="handleNumericInput(this, onSerumPctChange)" />
+            <span class="unit-pill">%</span>
+          </div>
         </div>
-        <div class="chips">
-          <button class="chip" onclick="setSerumPct(0)">0%</button>
-          <button class="chip" onclick="setSerumPct(2)">2%</button>
-          <button class="chip active" onclick="setSerumPct(3)">3%</button>
-          <button class="chip" onclick="setSerumPct(5)">5%</button>
-          <button class="chip" onclick="setSerumPct(10)">10%</button>
-          <button class="chip" onclick="setSerumPct(15)">15%</button>
-          <button class="chip" onclick="setSerumPct(20)">20%</button>
+        <div class="field" id="initSerumField">
+          <label>درصد سرم اولیه در استوک (%)</label>
+          <div class="input-wrap">
+            <input id="initSerumPctInput" type="text" inputmode="decimal" value="0" oninput="handleNumericInput(this, onInitSerumPctChange)" />
+            <span class="unit-pill">%</span>
+          </div>
         </div>
       </div>
+      <div class="chips" style="margin-bottom:10px;">
+        <button class="chip" onclick="setSerumPct(0)">0%</button>
+        <button class="chip" onclick="setSerumPct(2)">2%</button>
+        <button class="chip active" onclick="setSerumPct(3)">3%</button>
+        <button class="chip" onclick="setSerumPct(5)">5%</button>
+        <button class="chip" onclick="setSerumPct(10)">10%</button>
+        <button class="chip" onclick="setSerumPct(15)">15%</button>
+        <button class="chip" onclick="setSerumPct(20)">20%</button>
+      </div>
 
-      <div class="grid-2">
+      <div class="grid-3">
         <div class="field">
-          <label>حجم مدیا پایه</label>
+          <label>مدیا پایه</label>
           <div class="input-wrap">
-            <input id="mediaInput" type="text" inputmode="decimal" value="7.76" oninput="handleNumericInput(this, onMediaChange)" />
+            <input id="mediaInput" type="text" inputmode="decimal" oninput="handleNumericInput(this, onMediaChange)" />
             <button id="mediaUnitBtn" class="unit-pill" onclick="toggleUnit('media')">mL ⇄</button>
           </div>
-          <div id="mediaHelper" class="helper">= 0.00776 L</div>
+          <div id="mediaHelper" class="helper"></div>
         </div>
         <div class="field">
-          <label>حجم سرم</label>
+          <label>سرم (FBS)</label>
           <div class="input-wrap">
-            <input id="serumInput" type="text" inputmode="decimal" value="0.24" oninput="handleNumericInput(this, onSerumVolChange)" />
+            <input id="serumInput" type="text" inputmode="decimal" oninput="handleNumericInput(this, onSerumVolChange)" />
             <button id="serumUnitBtn" class="unit-pill" onclick="toggleUnit('serum')">mL ⇄</button>
           </div>
-          <div id="serumHelper" class="helper">= 0.00024 L</div>
+          <div id="serumHelper" class="helper"></div>
+        </div>
+        <div class="field">
+          <label>کل حجم اضافه‌شده</label>
+          <div class="input-wrap">
+            <input id="addedInput" type="text" inputmode="decimal" oninput="handleNumericInput(this, onAddedVolChange)" />
+            <button id="addedUnitBtn" class="unit-pill" onclick="toggleUnit('added')">mL ⇄</button>
+          </div>
+          <div id="addedHelper" class="helper"></div>
         </div>
       </div>
     </div>
 
     <div class="card">
-      <div style="font-weight:800;font-size:0.9rem;">خلاصه آماده پیپتینگ</div>
+      <div class="card-title">خلاصه آماده پیپتینگ</div>
       <div class="bar-track">
-        <div id="barCell" style="background:var(--cell);width:20%;"></div>
-        <div id="barMedia" style="background:var(--media);width:77.6%;"></div>
-        <div id="barSerum" style="background:var(--serum);width:2.4%;"></div>
+        <div id="barCell" style="background:var(--cell);width:0%;"></div>
+        <div id="barMedia" style="background:var(--media);width:0%;"></div>
+        <div id="barSerum" style="background:var(--serum);width:0%;"></div>
       </div>
       <div class="summary-grid">
-        <div class="tile" onclick="toggleUnit('media')">
+        <div class="tile clickable" onclick="toggleUnit('media')">
           <div class="tile-title"><span>مدیا پایه</span><span>⇄</span></div>
-          <div class="tile-val-row" style="color:var(--media);"><span id="sumMediaNum">7.76</span><span id="sumMediaUnit">mL</span></div>
+          <div class="tile-val-row" style="color:var(--media);"><span id="sumMediaNum">0</span><span id="sumMediaUnit">mL</span></div>
         </div>
-        <div class="tile" onclick="toggleUnit('serum')">
+        <div class="tile clickable" onclick="toggleUnit('serum')">
           <div class="tile-title"><span>سرم</span><span>⇄</span></div>
-          <div class="tile-val-row" style="color:var(--serum);"><span id="sumSerumNum">0.24</span><span id="sumSerumUnit">mL</span></div>
+          <div class="tile-val-row" style="color:var(--serum);"><span id="sumSerumNum">0</span><span id="sumSerumUnit">mL</span></div>
         </div>
-        <div class="tile" onclick="toggleUnit('v2')">
+        <div class="tile clickable" onclick="toggleUnit('v2')">
           <div class="tile-title"><span>حجم نهایی (V₂)</span><span>⇄</span></div>
-          <div class="tile-val-row" style="color:var(--primary);"><span id="sumV2Num">10</span><span id="sumV2Unit">mL</span></div>
+          <div class="tile-val-row" style="color:var(--primary);"><span id="sumV2Num">0</span><span id="sumV2Unit">mL</span></div>
         </div>
-        <div class="tile" onclick="toggleCountUnit('c2')">
+        <div class="tile clickable" onclick="toggleCountUnit('c2')">
           <div class="tile-title"><span>کانت تارگت (C₂)</span><span>⇄</span></div>
-          <div class="tile-val-row" style="color:var(--green);"><span id="sumC2Num">0.5</span><span id="sumC2Unit">میلیون</span></div>
+          <div class="tile-val-row" style="color:var(--green);"><span id="sumC2Num">0</span><span id="sumC2Unit">میلیون</span></div>
         </div>
       </div>
+      <button class="btn-primary" style="margin-top:10px;" onclick="saveDilutionToHistory()">💾 ذخیره این محاسبه در تاریخچه</button>
     </div>
   </div>
 
-  <!-- TAB 2: IMAGE CELL COUNTER -->
+  <!-- ==================== TAB 2: IMAGE CELL COUNTER ==================== -->
   <div id="tab-image" class="container hidden">
     <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <div style="font-weight:800;font-size:0.95rem;">شمارش سلول از روی عکس میکروسکوپ / لام</div>
+      <div class="card-title">
+        <span>نتیجه شمارش سلول از عکس</span>
         <button id="imgResUnitBtn" class="chip active" onclick="toggleImgResultUnit()">میلیون ⇄</button>
       </div>
-      <div class="tile" onclick="toggleImgResultUnit()" style="margin-bottom:8px;">
-        <div class="tile-title"><span>کانت سلول زنده (Viable Count)</span><span>کلیک برای تبدیل واحد ⇄</span></div>
+      <div class="tile clickable" onclick="toggleImgResultUnit()" style="margin-bottom:8px;">
+        <div class="tile-title"><span>غلظت سلول زنده (Viable Count)</span><span>کلیک برای تبدیل واحد ⇄</span></div>
         <div class="tile-val-row" style="color:var(--primary);font-size:1.25rem;">
-          <span id="imgViableConcNum">0.32</span>
+          <span id="imgViableConcNum">0</span>
           <span id="imgViableConcUnit">×10⁶/mL</span>
         </div>
       </div>
       <div class="grid-3">
         <div class="tile">
           <div class="tile-title"><span>سلول زنده</span></div>
-          <div class="tile-val-row" style="color:var(--green);"><span id="imgLiveCnt">16</span><span>سلول</span></div>
+          <div class="tile-val-row" style="color:var(--green);"><span id="imgLiveCnt">0</span><span>سلول</span></div>
         </div>
         <div class="tile">
           <div class="tile-title"><span>سلول مرده</span></div>
-          <div class="tile-val-row" style="color:var(--red);"><span id="imgDeadCnt">3</span><span>سلول</span></div>
+          <div class="tile-val-row" style="color:var(--red);"><span id="imgDeadCnt">0</span><span>سلول</span></div>
         </div>
         <div class="tile">
           <div class="tile-title"><span>زنده‌مانی</span></div>
-          <div class="tile-val-row" style="color:var(--green);"><span id="imgViabilityPct">84.2</span><span>%</span></div>
+          <div class="tile-val-row" style="color:var(--green);"><span id="imgViabilityPct">0</span><span>%</span></div>
         </div>
       </div>
-      <button class="btn-primary" onclick="sendImageCountToDilution()">انتقال کانت عکس به بخش رقت و سرم</button>
+      <div class="grid-2" style="margin-top:8px;">
+        <button class="btn-primary" onclick="sendImageCountToDilution()">انتقال به رقت و سرم</button>
+        <button class="btn-outline" onclick="sendImageCountToMixer()">+ افزودن به میکس</button>
+      </div>
     </div>
 
     <div class="card">
-      <div style="display:flex;gap:8px;margin-bottom:8px;">
-        <label class="btn-outline" style="flex:1;text-align:center;">
-          📷 انتخاب عکس لام / میکروسکوپ
+      <div class="card-title">موتور بینایی ماشین سبک CountThings (آفلاین و لمسی)</div>
+      <div class="info-box" style="margin-bottom:8px;">
+        یکسان‌سازی نوردهی، حذف گوشه‌های چشمی میکروسکوپ، تشخیص تقارن ۳۶۰° سلول زنده، تفکیک سلول مرده و قابلیت <strong>تطبیق الگوی لمسی (Tap-to-Template)</strong>.
+      </div>
+      <div class="grid-2" style="margin-bottom:8px;">
+        <label class="btn-primary" style="text-align:center;margin:0;">
+          📷 انتخاب عکس لام از دستگاه
           <input type="file" accept="image/*" style="display:none;" onchange="handleSlideImageUpload(event)" />
         </label>
-        <button class="btn-outline" onclick="resetSampleSlide()">شان نمونه</button>
+        <button class="btn-outline" onclick="rerunImageAutoDetect()">🔄 شمارش خودکار مجدد</button>
       </div>
 
       <div class="chips">
-        <button id="toolLiveBtn" class="chip active" onclick="setMarkerTool('LIVE')">🟢 سلول زنده (+)</button>
-        <button id="toolDeadBtn" class="chip" onclick="setMarkerTool('DEAD')">🔴 سلول مرده (+)</button>
-        <button id="toolEraseBtn" class="chip" onclick="setMarkerTool('ERASE')">⌫ حذف نشانه</button>
-        <button class="chip" onclick="clearSlideMarkers()">پاک‌سازی همه</button>
+        <button id="toolLiveBtn" class="chip active" onclick="setMarkerTool('LIVE')">🟢 + زنده</button>
+        <button id="toolDeadBtn" class="chip" onclick="setMarkerTool('DEAD')">🔴 + مرده</button>
+        <button id="toolEraseBtn" class="chip" onclick="setMarkerTool('ERASE')">⌫ حذف</button>
+        <button id="toolTmplLiveBtn" class="chip" onclick="setMarkerTool('TMPL_LIVE')">🎯 الگوی زنده (لمس ۱ سلول)</button>
+        <button id="toolTmplDeadBtn" class="chip" onclick="setMarkerTool('TMPL_DEAD')">🎯 الگوی مرده (لمس ۱ سلول)</button>
       </div>
 
-      <canvas id="slideCanvas" width="520" height="520"></canvas>
+      <div id="tmplHintBanner" class="alert-box hidden">
+        🎯 حالت CountThings فعال است: روی یک سلول نمونه واضح داخل عکس ضربه بزنید تا تمام سلول‌های هم‌شکل پیدا شوند.
+      </div>
 
-      <div class="grid-2" style="margin:6px 0 8px 0;">
+      <canvas id="slideCanvas" width="720" height="720"></canvas>
+
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+        <button id="gridToggleBtn" class="chip active" onclick="toggleWebGrid()">شبکه ۴×۴</button>
+        <button class="btn-outline" onclick="undoLastWebMarker()">↩ واگرد</button>
+        <button class="btn-danger" onclick="clearSlideMarkers()">پاک‌سازی</button>
+        <button class="btn-outline" onclick="downloadAnnotatedWebSlide()">💾 دانلود عکس علامت‌گذاری‌شده</button>
+      </div>
+
+      <div class="grid-2" style="margin-bottom:8px;">
         <div class="field">
-          <label>قدرت تشخیص خودکار: <span id="sensValLbl">78%</span></label>
-          <input id="sensSlider" type="range" min="15" max="98" value="78" oninput="onWebSensChange(this.value)" />
+          <label>آستانه حساسیت تشخیص: <span id="sensValLbl">62%</span></label>
+          <input id="sensSlider" type="range" min="15" max="95" value="62" oninput="onWebSensChange(this.value)" />
         </div>
         <div class="field">
           <label>اندازه نشانه سلول: <span id="markerSizeLbl">45%</span></label>
@@ -347,16 +432,23 @@
         </div>
       </div>
 
-      <div class="grid-2" style="margin-top:8px;">
+      <!-- 4x4 Neubauer Grid Table -->
+      <div style="font-weight:800;font-size:0.82rem;margin:8px 0 4px 0;color:var(--primary);">جدول ۴ در ۴ خانه‌های کوچک لام نئوبار (+زنده / -مرده):</div>
+      <div id="grid4x4Container" class="grid-4" style="direction:ltr;"></div>
+
+      <!-- Formula -->
+      <div id="imgFormulaBox" class="info-box" style="margin-top:8px;"></div>
+
+      <div class="grid-2" style="margin-top:10px;">
         <div class="field">
-          <label>ضریب رقت (مثلاً تریپان بلو)</label>
+          <label>ضریب رقت (تریپان بلو)</label>
           <div class="input-wrap">
             <input id="imgDilInput" type="text" inputmode="decimal" value="2" oninput="handleNumericInput(this, recalcImageCount)" />
             <span class="unit-pill">برابر (×)</span>
           </div>
         </div>
         <div class="field">
-          <label>تعداد خانه در عکس</label>
+          <label>تعداد خانه بزرگ در عکس</label>
           <div class="input-wrap">
             <input id="imgSqInput" type="text" inputmode="decimal" value="1" oninput="handleNumericInput(this, recalcImageCount)" />
             <span class="unit-pill">خانه</span>
@@ -366,97 +458,606 @@
     </div>
   </div>
 
-  <!-- TAB 3: MIXER -->
+  <!-- ==================== TAB 3: CELL MIXER ==================== -->
   <div id="tab-mixer" class="container hidden">
     <div class="card">
-      <div style="font-weight:800;font-size:0.95rem;margin-bottom:8px;">میکس چند نمونه سلولی (mL/L و میلیون/عدد کامل)</div>
+      <div class="card-title">میکس چند سوسپانسیون سلولی</div>
       <div class="summary-grid">
-        <div class="tile" onclick="toggleMixCountUnit()">
+        <div class="tile clickable" onclick="toggleMixCountUnit()">
           <div class="tile-title"><span>کانت نهایی میکس</span><span>⇄</span></div>
-          <div class="tile-val-row" style="color:var(--primary);"><span id="mixFinalCountNum">1.6615</span><span id="mixFinalCountUnit">میلیون</span></div>
+          <div class="tile-val-row" style="color:var(--primary);"><span id="mixFinalCountNum">0</span><span id="mixFinalCountUnit">میلیون</span></div>
         </div>
-        <div class="tile" onclick="toggleMixVolUnit()">
+        <div class="tile clickable" onclick="toggleMixVolUnit()">
           <div class="tile-title"><span>حجم کل میکس</span><span>⇄</span></div>
-          <div class="tile-val-row" style="color:var(--cell);"><span id="mixFinalVolNum">6.5</span><span id="mixFinalVolUnit">mL</span></div>
+          <div class="tile-val-row" style="color:var(--cell);"><span id="mixFinalVolNum">0</span><span id="mixFinalVolUnit">mL</span></div>
         </div>
       </div>
-      <div id="mixerSamplesList" style="margin-top:12px;display:flex;flex-direction:column;gap:10px;"></div>
-      <button class="btn-primary" onclick="addMixSample()">+ افزودن نمونه سلولی</button>
+      <div class="field" style="margin-top:10px;">
+        <label>مدیا یا بافر اضافه‌شده به میکس</label>
+        <div class="input-wrap">
+          <input id="mixExtraMediaInput" type="text" inputmode="decimal" placeholder="0" oninput="handleNumericInput(this, renderMixerTotalsOnly)" />
+          <button id="mixExtraUnitBtn" class="unit-pill" onclick="toggleMixExtraUnit()">mL ⇄</button>
+        </div>
+      </div>
+      <div id="mixerSamplesList" style="margin-top:10px;display:flex;flex-direction:column;gap:10px;"></div>
+      <div class="grid-2" style="margin-top:10px;">
+        <button class="btn-primary" onclick="addMixSample()">+ افزودن نمونه سلولی</button>
+        <button class="btn-outline" onclick="sendMixToDilution()">انتقال به رقت و سرم</button>
+      </div>
+      <button class="btn-outline" style="width:100%;margin-top:8px;" onclick="saveMixToHistory()">💾 ذخیره میکس در تاریخچه</button>
     </div>
   </div>
 
+  <!-- ==================== TAB 4: NEUBAUER COUNTER ==================== -->
+  <div id="tab-neubauer" class="container hidden">
+    <div class="card">
+      <div class="card-title">
+        <span>شمارشگر لام نئوبار و درصد زنده‌مانی</span>
+        <button id="neuResUnitBtn" class="chip active" onclick="toggleNeubauerResultUnit()">میلیون ⇄</button>
+      </div>
+      <div class="summary-grid">
+        <div class="tile clickable" onclick="toggleNeubauerResultUnit()">
+          <div class="tile-title"><span>غلظت سلول زنده</span><span>⇄</span></div>
+          <div class="tile-val-row" style="color:var(--primary);"><span id="neuViableConc">0</span><span id="neuViableUnit">میلیون/mL</span></div>
+        </div>
+        <div class="tile">
+          <div class="tile-title"><span>درصد زنده‌مانی (Viability)</span></div>
+          <div class="tile-val-row" style="color:var(--green);"><span id="neuViabilityPct">0</span><span>%</span></div>
+        </div>
+        <div class="tile">
+          <div class="tile-title"><span>میانگین در هر خانه</span></div>
+          <div class="tile-val-row" style="color:var(--cell);"><span id="neuAvgPerSq">0</span><span>سلول</span></div>
+        </div>
+        <div class="tile">
+          <div class="tile-title"><span>کل سلول زنده ظرف</span></div>
+          <div class="tile-val-row" style="color:var(--amber);"><span id="neuTotalInSample">0</span><span>میلیون</span></div>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-top:10px;">
+        <div class="field">
+          <label>ضریب رقت تریپان بلو</label>
+          <div class="input-wrap">
+            <input id="neuDilInput" type="text" inputmode="decimal" value="2" oninput="handleNumericInput(this, recalcNeubauer)" />
+            <span class="unit-pill">×</span>
+          </div>
+        </div>
+        <div class="field">
+          <label>حجم کل سوسپانسیون</label>
+          <div class="input-wrap">
+            <input id="neuVolInput" type="text" inputmode="decimal" placeholder="اختیاری" oninput="handleNumericInput(this, recalcNeubauer)" />
+            <button id="neuVolUnitBtn" class="unit-pill" onclick="toggleNeuVolUnit()">mL ⇄</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        <span>شمارش خانه‌های بزرگ نئوبار</span>
+        <div style="display:flex;gap:6px;">
+          <button class="chip" onclick="addNeubauerSquare()">+ خانه</button>
+          <button class="chip" onclick="clearNeubauerSquares()">پاک‌سازی</button>
+        </div>
+      </div>
+      <div id="neubauerSquaresList" style="display:flex;flex-direction:column;gap:8px;"></div>
+      <div class="grid-2" style="margin-top:10px;">
+        <button class="btn-primary" onclick="sendNeubauerToDilution()">ارسال کانت به رقت و سرم</button>
+        <button class="btn-outline" onclick="sendNeubauerToMixer()">+ افزودن به میکس</button>
+      </div>
+      <button class="btn-outline" style="width:100%;margin-top:8px;" onclick="saveNeubauerToHistory()">💾 ذخیره شمارش نئوبار در تاریخچه</button>
+    </div>
+  </div>
+
+  <!-- ==================== TAB 5: CELL GROWTH PREDICTOR ==================== -->
+  <div id="tab-growth" class="container hidden">
+    <div class="card">
+      <div class="card-title">پیش‌بینی رشد سلول (لجستیک و نمایی)</div>
+      <div class="card-sub">انتخاب رده سلولی (شامل ۴ رده BHK) و ظرف یا بیوراکتور صنعتی (تا ۲۷۰۰ لیتر)</div>
+
+      <div style="font-size:0.76rem;font-weight:700;color:var(--text-muted);">رده سلولی:</div>
+      <div id="cellLineChips" class="chips"></div>
+
+      <div style="font-size:0.76rem;font-weight:700;color:var(--text-muted);margin-top:8px;">ظرف کشت / بیوراکتور:</div>
+      <div id="vesselChips" class="chips"></div>
+
+      <div class="grid-2" style="margin-top:10px;">
+        <div class="field">
+          <label>تعداد اولیه سلول (N₀)</label>
+          <div class="input-wrap">
+            <input id="grN0Input" type="text" inputmode="decimal" placeholder="تعداد اولیه" oninput="handleNumericInput(this, recalcGrowth)" />
+            <button id="grN0UnitBtn" class="unit-pill" onclick="toggleGrowthUnit('N0')">میلیون ⇄</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>ظرفیت حداکثر ظرف / بیوراکتور (K)</label>
+          <div class="input-wrap">
+            <input id="grKInput" type="text" inputmode="decimal" placeholder="حداکثر ظرفیت" oninput="handleNumericInput(this, recalcGrowth)" />
+            <button id="grKUnitBtn" class="unit-pill" onclick="toggleGrowthUnit('K')">میلیون ⇄</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>زمان دوبرابر شدن (Doubling Time)</label>
+          <div class="input-wrap">
+            <input id="grTdInput" type="text" inputmode="decimal" value="13.5" oninput="handleNumericInput(this, recalcGrowth)" />
+            <span class="unit-pill">ساعت</span>
+          </div>
+        </div>
+        <div class="field">
+          <label>فاز تأخیر (Lag Phase)</label>
+          <div class="input-wrap">
+            <input id="grLagInput" type="text" inputmode="decimal" value="3" oninput="handleNumericInput(this, recalcGrowth)" />
+            <span class="unit-pill">ساعت</span>
+          </div>
+        </div>
+        <div class="field">
+          <label>مدت انکوباسیون</label>
+          <div class="input-wrap">
+            <input id="grHoursInput" type="text" inputmode="decimal" value="48" oninput="handleNumericInput(this, recalcGrowth)" />
+            <span class="unit-pill">ساعت</span>
+          </div>
+        </div>
+        <div class="field">
+          <label>هدف تراکم / پاساژ (Confluency %)</label>
+          <div class="input-wrap">
+            <input id="grTargetConfInput" type="text" inputmode="decimal" value="80" oninput="handleNumericInput(this, recalcGrowth)" />
+            <span class="unit-pill">%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        <span>نتایج پیش‌بینی رشد</span>
+        <button id="grResUnitBtn" class="chip active" onclick="toggleGrowthUnit('RES')">میلیون ⇄</button>
+      </div>
+      <div class="summary-grid">
+        <div class="tile">
+          <div class="tile-title"><span>تعداد واقعی (لجستیک)</span></div>
+          <div class="tile-val-row" style="color:var(--green);"><span id="grPredLogistic">0</span><span id="grResUnit1">میلیون</span></div>
+        </div>
+        <div class="tile">
+          <div class="tile-title"><span>تراکم (Confluency)</span></div>
+          <div class="tile-val-row" style="color:var(--primary);"><span id="grPredConf">0</span><span>%</span></div>
+        </div>
+        <div class="tile">
+          <div class="tile-title"><span>زمان رسیدن به هدف</span></div>
+          <div class="tile-val-row" style="color:var(--amber);"><span id="grHoursToTarget">0</span><span>ساعت</span></div>
+        </div>
+        <div class="tile">
+          <div class="tile-title"><span>نسل‌های رشد (PDL)</span></div>
+          <div class="tile-val-row" style="color:var(--cell);"><span id="grPdlVal">0</span><span>دوبل</span></div>
+        </div>
+      </div>
+
+      <canvas id="growthCanvas" width="680" height="260"></canvas>
+
+      <table class="growth-table">
+        <thead>
+          <tr><th>ساعت</th><th>سلول واقعی (لجستیک)</th><th>سلول نمایی</th><th>تراکم %</th><th>PDL</th></tr>
+        </thead>
+        <tbody id="growthScheduleBody"></tbody>
+      </table>
+      <button class="btn-outline" style="width:100%;margin-top:8px;" onclick="saveGrowthToHistory()">💾 ذخیره پیش‌بینی رشد در تاریخچه</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">محاسبه تجربی Doubling Time از دو شمارش آزمایشگاه (N₁ → N₂)</div>
+      <div class="grid-3">
+        <div class="field">
+          <label>شمارش اول (N₁)</label>
+          <div class="input-wrap"><input id="empN1Input" type="text" inputmode="decimal" oninput="handleNumericInput(this, recalcEmpiricalTd)" /><span class="unit-pill">M</span></div>
+        </div>
+        <div class="field">
+          <label>شمارش دوم (N₂)</label>
+          <div class="input-wrap"><input id="empN2Input" type="text" inputmode="decimal" oninput="handleNumericInput(this, recalcEmpiricalTd)" /><span class="unit-pill">M</span></div>
+        </div>
+        <div class="field">
+          <label>زمان بین دو شمارش</label>
+          <div class="input-wrap"><input id="empDtInput" type="text" inputmode="decimal" value="36" oninput="handleNumericInput(this, recalcEmpiricalTd)" /><span class="unit-pill">h</span></div>
+        </div>
+      </div>
+      <div class="info-box" style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
+        <span>زمان دوبرابر شدن تجربی: <strong id="empTdResult">0 ساعت</strong></span>
+        <button class="chip active" onclick="applyEmpiricalTd()">اعمال روی پیش‌بینی</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== TAB 6: SEEDING & HISTORY ==================== -->
+  <div id="tab-seeding" class="container hidden">
+    <div class="card">
+      <div class="card-title">محاسبه‌گر پلیت‌ریزی، فلاسک و بیوراکتور (با خطای پیپتینگ)</div>
+      <div id="seedingVesselChips" class="chips"></div>
+      <div class="grid-2" style="margin-top:10px;">
+        <div class="field">
+          <label>تعداد خانه / ظرف</label>
+          <div class="input-wrap"><input id="seedWellsInput" type="text" inputmode="decimal" value="6" oninput="handleNumericInput(this, recalcSeeding)" /><span class="unit-pill">عدد</span></div>
+        </div>
+        <div class="field">
+          <label>حجم هر خانه</label>
+          <div class="input-wrap"><input id="seedVolInput" type="text" inputmode="decimal" placeholder="حجم" oninput="handleNumericInput(this, recalcSeeding)" /><button id="seedVolUnitBtn" class="unit-pill" onclick="toggleSeedUnit('VOL')">mL ⇄</button></div>
+        </div>
+        <div class="field">
+          <label>تعداد سلول هدف در هر خانه</label>
+          <div class="input-wrap"><input id="seedTargetInput" type="text" inputmode="decimal" placeholder="سلول هدف" oninput="handleNumericInput(this, recalcSeeding)" /><button id="seedTargetUnitBtn" class="unit-pill" onclick="toggleSeedUnit('TARGET')">میلیون ⇄</button></div>
+        </div>
+        <div class="field">
+          <label>کانت استوک سلولی</label>
+          <div class="input-wrap"><input id="seedStockInput" type="text" inputmode="decimal" placeholder="کانت استوک" oninput="handleNumericInput(this, recalcSeeding)" /><button id="seedStockUnitBtn" class="unit-pill" onclick="toggleSeedUnit('STOCK')">میلیون ⇄</button></div>
+        </div>
+        <div class="field">
+          <label>درصد سرم (% FBS)</label>
+          <div class="input-wrap"><input id="seedSerumInput" type="text" inputmode="decimal" value="10" oninput="handleNumericInput(this, recalcSeeding)" /><span class="unit-pill">%</span></div>
+        </div>
+        <div class="field">
+          <label>درصد خطای پیپتینگ (Overfill)</label>
+          <div class="input-wrap"><input id="seedOverfillInput" type="text" inputmode="decimal" value="10" oninput="handleNumericInput(this, recalcSeeding)" /><span class="unit-pill">%</span></div>
+        </div>
+      </div>
+
+      <div class="summary-grid" style="margin-top:10px;">
+        <div class="tile"><div class="tile-title"><span>حجم استوک سلولی مورد نیاز</span></div><div class="tile-val-row" style="color:var(--cell);"><span id="seedReqStock">0</span><span>mL</span></div></div>
+        <div class="tile"><div class="tile-title"><span>مدیا پایه مورد نیاز</span></div><div class="tile-val-row" style="color:var(--media);"><span id="seedReqMedia">0</span><span>mL</span></div></div>
+        <div class="tile"><div class="tile-title"><span>سرم (FBS) مورد نیاز</span></div><div class="tile-val-row" style="color:var(--serum);"><span id="seedReqSerum">0</span><span>mL</span></div></div>
+        <div class="tile"><div class="tile-title"><span>کل حجم مسترمیکس</span></div><div class="tile-val-row" style="color:var(--primary);"><span id="seedTotalMix">0</span><span>mL</span></div></div>
+      </div>
+      <button class="btn-primary" style="margin-top:10px;" onclick="saveSeedingToHistory()">💾 ذخیره پلیت‌ریزی در تاریخچه</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        <span>تاریخچه محاسبات آزمایشگاهی</span>
+        <button class="btn-danger" onclick="clearHistory()">پاک کردن تاریخچه</button>
+      </div>
+      <div id="historyListContainer" style="display:flex;flex-direction:column;gap:8px;margin-top:6px;"></div>
+    </div>
+  </div>
+
+  <!-- BOTTOM 6-TAB NAVIGATION -->
   <nav class="nav-bar">
-    <button id="navDil" class="nav-item active" onclick="switchTab('dilution')">رقت و سرم</button>
-    <button id="navImg" class="nav-item" onclick="switchTab('image')">شمارش با عکس</button>
-    <button id="navMix" class="nav-item" onclick="switchTab('mixer')">میکس سلولی</button>
+    <button id="nav-dilution" class="nav-item active" onclick="switchTab('dilution')"><span>🧪</span><span>رقت و سرم</span></button>
+    <button id="nav-image" class="nav-item" onclick="switchTab('image')"><span>📷</span><span>شمارش عکس</span></button>
+    <button id="nav-mixer" class="nav-item" onclick="switchTab('mixer')"><span>🔀</span><span>میکس</span></button>
+    <button id="nav-neubauer" class="nav-item" onclick="switchTab('neubauer')"><span>#️⃣</span><span>نئوبار</span></button>
+    <button id="nav-growth" class="nav-item" onclick="switchTab('growth')"><span>📈</span><span>رشد سلول</span></button>
+    <button id="nav-seeding" class="nav-item" onclick="switchTab('seeding')"><span>🧫</span><span>پلیت و تاریخچه</span></button>
   </nav>
 
   <script>
-    const units = { v1: 'mL', v2: 'mL', media: 'mL', serum: 'mL' };
-    const countUnits = { c1: 'MILLION', c2: 'MILLION' };
-    let mixVolUnit = 'mL';
-    let mixCountUnit = 'MILLION';
-    let mixSamples = [
-      { v: 3, vUnit: 'mL', c: 2.4, cUnit: 'MILLION' },
-      { v: 2, vUnit: 'mL', c: 1.2, cUnit: 'MILLION' },
-      { v: 1.5, vUnit: 'mL', c: 0.8, cUnit: 'MILLION' }
-    ];
+    // ==================== SHARED FORMATTERS & UNITS ====================
+    function stripNum(str) {
+      if (!str) return '';
+      const p = '۰۱۲۳۴۵۶۷۸۹', a = '٠١٢٣٤٥٦٧٨٩';
+      let out = '', hasDot = false;
+      for (const ch of String(str)) {
+        const pi = p.indexOf(ch); if (pi >= 0) { out += pi; continue; }
+        const ai = a.indexOf(ch); if (ai >= 0) { out += ai; continue; }
+        if (ch === '.' || ch === '٫' || ch === '/') { if (!hasDot) { out += '.'; hasDot = true; } }
+        else if (ch >= '0' && ch <= '9') out += ch;
+      }
+      return out;
+    }
+    function addCommasToStr(raw) {
+      const clean = stripNum(raw); if (!clean) return '';
+      const parts = clean.split('.');
+      parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      return parts.length > 1 ? parts[0] + '.' + parts[1] : parts[0];
+    }
+    function parseNum(str) { return parseFloat(stripNum(str)) || 0; }
+    function fmt(n, d = 4) {
+      if (!isFinite(n) || n <= 0) return '0';
+      return addCommasToStr(Number(n.toFixed(d)).toString());
+    }
+    function fmtCleanInput(n, d = 5) {
+      if (!isFinite(n) || n <= 0) return '';
+      return addCommasToStr(Number(n.toFixed(d)).toString());
+    }
+    function handleNumericInput(el, cb) {
+      const cursor = el.selectionStart || 0;
+      const digitsBefore = stripNum(el.value.slice(0, cursor)).length;
+      const formatted = addCommasToStr(el.value);
+      el.value = formatted;
+      let pos = 0, seen = 0;
+      while (pos < formatted.length && seen < digitsBefore) { if (formatted[pos] !== ',') seen++; pos++; }
+      try { el.setSelectionRange(pos, pos); } catch (_) {}
+      if (cb) cb();
+    }
+    function toMl(val, u) { return u === 'L' ? val * 1000 : val; }
+    function fromMl(ml, u) { return u === 'L' ? ml / 1000 : ml; }
+    function toRaw(val, u) { return u === 'MILLION' ? val * 1e6 : val; }
+    function fromRaw(raw, u) { return u === 'MILLION' ? raw / 1e6 : Math.round(raw); }
 
-    // Image Counter State
+    function toggleTheme() {
+      document.body.classList.toggle('dark');
+      const isDark = document.body.classList.contains('dark');
+      document.getElementById('themeBtn').textContent = isDark ? '☀️ حالت روز' : '🌙 حالت شب';
+      drawGrowthChart();
+    }
+
+    function switchTab(tab) {
+      ['dilution', 'image', 'mixer', 'neubauer', 'growth', 'seeding'].forEach(t => {
+        document.getElementById('tab-' + t).classList.toggle('hidden', t !== tab);
+        document.getElementById('nav-' + t).classList.toggle('active', t === tab);
+      });
+      if (tab === 'mixer') renderMixer();
+      if (tab === 'image') { drawSlideCanvas(); recalcImageCount(); }
+      if (tab === 'neubauer') { renderNeubauerSquares(); recalcNeubauer(); }
+      if (tab === 'growth') { recalcGrowth(); }
+      if (tab === 'seeding') { recalcSeeding(); renderHistory(); }
+    }
+
+    // ==================== TAB 1: DILUTION & SERUM ====================
+    const units = { v1: 'mL', v2: 'mL', media: 'mL', serum: 'mL', added: 'mL' };
+    const countUnits = { c1: 'MILLION', c2: 'MILLION' };
+    let stockMode = 'USE_ALL';
+    let targetAnchor = 'C2';
+    let serumBasis = 'ADDED';
+
+    function setStockMode(m) {
+      stockMode = m;
+      document.getElementById('stockAllBtn').classList.toggle('active', m === 'USE_ALL');
+      document.getElementById('stockWithdrawBtn').classList.toggle('active', m === 'WITHDRAW');
+      recalcFromStock();
+    }
+    function setTargetAnchor(a) {
+      targetAnchor = a;
+      document.getElementById('anchorC2Btn').classList.toggle('active', a === 'C2');
+      document.getElementById('anchorV2Btn').classList.toggle('active', a === 'V2');
+    }
+    function setSerumBasis(b) {
+      serumBasis = b;
+      document.getElementById('basisAddedBtn').classList.toggle('active', b === 'ADDED');
+      document.getElementById('basisFinalBtn').classList.toggle('active', b === 'FINAL');
+      updateMediaAndSerumFromV1V2(getV1Ml(), getV2Ml());
+      refreshDilutionSummary();
+    }
+    function getV1Ml() { return toMl(parseNum(document.getElementById('v1Input').value), units.v1); }
+    function getV2Ml() { return toMl(parseNum(document.getElementById('v2Input').value), units.v2); }
+    function getC1Raw() { return toRaw(parseNum(document.getElementById('c1Input').value), countUnits.c1); }
+    function getC2Raw() { return toRaw(parseNum(document.getElementById('c2Input').value), countUnits.c2); }
+
+    function toggleUnit(f) {
+      const inp = document.getElementById(f + 'Input');
+      const ml = toMl(parseNum(inp.value), units[f]);
+      units[f] = units[f] === 'mL' ? 'L' : 'mL';
+      if (inp.value.trim()) inp.value = fmtCleanInput(fromMl(ml, units[f]), 5);
+      document.getElementById(f + 'UnitBtn').textContent = units[f] + ' ⇄';
+      refreshDilutionSummary();
+    }
+    function toggleCountUnit(f) {
+      const inp = document.getElementById(f + 'Input');
+      const raw = toRaw(parseNum(inp.value), countUnits[f]);
+      countUnits[f] = countUnits[f] === 'MILLION' ? 'RAW' : 'MILLION';
+      if (inp.value.trim()) inp.value = fmtCleanInput(fromRaw(raw, countUnits[f]), countUnits[f] === 'RAW' ? 0 : 4);
+      document.getElementById(f + 'UnitBtn').textContent = (countUnits[f] === 'MILLION' ? 'میلیون' : 'عدد کامل') + ' ⇄';
+      refreshDilutionSummary();
+    }
+    function setGlobalVolUnit(u) {
+      ['v1', 'v2', 'media', 'serum', 'added'].forEach(f => { if (units[f] !== u) toggleUnit(f); });
+      document.getElementById('volBtnML').classList.toggle('active', u === 'mL');
+      document.getElementById('volBtnL').classList.toggle('active', u === 'L');
+    }
+    function setGlobalCountUnit(u) {
+      ['c1', 'c2'].forEach(f => { if (countUnits[f] !== u) toggleCountUnit(f); });
+      document.getElementById('cntBtnMil').classList.toggle('active', u === 'MILLION');
+      document.getElementById('cntBtnRaw').classList.toggle('active', u === 'RAW');
+    }
+    function setSerumPct(p) {
+      document.getElementById('serumPctInput').value = String(p);
+      onSerumPctChange();
+    }
+    function onV1Change() { recalcFromStock(); }
+    function onC1Change() { recalcFromStock(); }
+    function onC2Change() {
+      targetAnchor = 'C2'; setTargetAnchor('C2');
+      const c1 = getC1Raw(), c2 = getC2Raw();
+      if (c1 > 0 && c2 > 0) {
+        if (stockMode === 'USE_ALL') {
+          const v1 = getV1Ml(), v2 = (c1 * v1) / c2;
+          document.getElementById('v2Input').value = fmtCleanInput(fromMl(v2, units.v2), 5);
+          updateMediaAndSerumFromV1V2(v1, v2);
+        } else {
+          const v2 = getV2Ml(), v1 = (c2 * v2) / c1;
+          document.getElementById('v1Input').value = fmtCleanInput(fromMl(v1, units.v1), 5);
+          updateMediaAndSerumFromV1V2(v1, v2);
+        }
+      }
+      refreshDilutionSummary();
+    }
+    function onV2Change() {
+      targetAnchor = 'V2'; setTargetAnchor('V2');
+      const c1 = getC1Raw(), v2 = getV2Ml();
+      if (c1 > 0 && v2 > 0) {
+        if (stockMode === 'USE_ALL') {
+          const v1 = getV1Ml(), c2 = (c1 * v1) / v2;
+          document.getElementById('c2Input').value = fmtCleanInput(fromRaw(c2, countUnits.c2), countUnits.c2 === 'RAW' ? 0 : 4);
+          updateMediaAndSerumFromV1V2(v1, v2);
+        } else {
+          const c2 = getC2Raw(), v1 = (c2 * v2) / c1;
+          document.getElementById('v1Input').value = fmtCleanInput(fromMl(v1, units.v1), 5);
+          updateMediaAndSerumFromV1V2(v1, v2);
+        }
+      }
+      refreshDilutionSummary();
+    }
+    function onSerumPctChange() { updateMediaAndSerumFromV1V2(getV1Ml(), getV2Ml()); refreshDilutionSummary(); }
+    function onInitSerumPctChange() { updateMediaAndSerumFromV1V2(getV1Ml(), getV2Ml()); refreshDilutionSummary(); }
+    function recalcFromStock() {
+      const v1 = getV1Ml(), c1 = getC1Raw();
+      if (c1 > 0) {
+        if (targetAnchor === 'C2') {
+          const c2 = getC2Raw();
+          if (c2 > 0) {
+            const v2 = (c1 * v1) / c2;
+            document.getElementById('v2Input').value = fmtCleanInput(fromMl(v2, units.v2), 5);
+            updateMediaAndSerumFromV1V2(v1, v2);
+          }
+        } else {
+          const v2 = getV2Ml();
+          if (v2 > 0) {
+            const c2 = (c1 * v1) / v2;
+            document.getElementById('c2Input').value = fmtCleanInput(fromRaw(c2, countUnits.c2), countUnits.c2 === 'RAW' ? 0 : 4);
+            updateMediaAndSerumFromV1V2(v1, v2);
+          }
+        }
+      }
+      refreshDilutionSummary();
+    }
+    function updateMediaAndSerumFromV1V2(v1Ml, v2Ml, keepAdded = false) {
+      const sPct = Math.min(100, Math.max(0, parseNum(document.getElementById('serumPctInput').value)));
+      const initPct = Math.min(100, Math.max(0, parseNum(document.getElementById('initSerumPctInput').value)));
+      const vAdd = Math.max(0, v2Ml - v1Ml);
+      let vSerum = 0, vMedia = 0;
+      if (serumBasis === 'ADDED') {
+        vSerum = vAdd * (sPct / 100);
+        vMedia = Math.max(0, vAdd - vSerum);
+      } else {
+        const needed = v2Ml * (sPct / 100), inStock = v1Ml * (initPct / 100);
+        vSerum = Math.min(vAdd, Math.max(0, needed - inStock));
+        vMedia = Math.max(0, vAdd - vSerum);
+      }
+      document.getElementById('mediaInput').value = fmtCleanInput(fromMl(vMedia, units.media), 5);
+      document.getElementById('serumInput').value = fmtCleanInput(fromMl(vSerum, units.serum), 5);
+      if (!keepAdded) document.getElementById('addedInput').value = fmtCleanInput(fromMl(vAdd, units.added), 5);
+    }
+    function onMediaChange() {
+      const vMedia = toMl(parseNum(document.getElementById('mediaInput').value), units.media);
+      const v1 = getV1Ml(), c1 = getC1Raw();
+      const sF = Math.min(0.999, Math.max(0, parseNum(document.getElementById('serumPctInput').value) / 100));
+      const iF = Math.min(1, Math.max(0, parseNum(document.getElementById('initSerumPctInput').value) / 100));
+      let vSerum = 0, vAdd = 0, v2 = 0;
+      if (serumBasis === 'ADDED') {
+        vAdd = vMedia / (1 - sF); vSerum = Math.max(0, vAdd - vMedia); v2 = v1 + vAdd;
+      } else {
+        vSerum = Math.max(0, ((v1 + vMedia) * sF - v1 * iF) / (1 - sF));
+        vAdd = vMedia + vSerum; v2 = v1 + vAdd;
+      }
+      const c2 = v2 > 0 ? (c1 * v1) / v2 : 0;
+      document.getElementById('serumInput').value = fmtCleanInput(fromMl(vSerum, units.serum), 5);
+      document.getElementById('addedInput').value = fmtCleanInput(fromMl(vAdd, units.added), 5);
+      document.getElementById('v2Input').value = fmtCleanInput(fromMl(v2, units.v2), 5);
+      document.getElementById('c2Input').value = fmtCleanInput(fromRaw(c2, countUnits.c2), countUnits.c2 === 'RAW' ? 0 : 4);
+      refreshDilutionSummary();
+    }
+    function onSerumVolChange() {
+      const vSerum = toMl(parseNum(document.getElementById('serumInput').value), units.serum);
+      const v1 = getV1Ml(), c1 = getC1Raw();
+      const sF = Math.min(1, Math.max(0, parseNum(document.getElementById('serumPctInput').value) / 100));
+      const iF = Math.min(1, Math.max(0, parseNum(document.getElementById('initSerumPctInput').value) / 100));
+      let vAdd = 0, vMedia = 0;
+      if (sF > 0) {
+        if (serumBasis === 'ADDED') { vAdd = vSerum / sF; vMedia = Math.max(0, vAdd - vSerum); }
+        else { const v2t = (vSerum + v1 * iF) / sF; vAdd = Math.max(vSerum, v2t - v1); vMedia = Math.max(0, vAdd - vSerum); }
+        document.getElementById('mediaInput').value = fmtCleanInput(fromMl(vMedia, units.media), 5);
+      } else {
+        vMedia = toMl(parseNum(document.getElementById('mediaInput').value), units.media);
+        vAdd = vMedia + vSerum;
+        if (vAdd > 0) document.getElementById('serumPctInput').value = fmtCleanInput((vSerum / vAdd) * 100, 2);
+      }
+      const v2 = v1 + vAdd, c2 = v2 > 0 ? (c1 * v1) / v2 : 0;
+      document.getElementById('addedInput').value = fmtCleanInput(fromMl(vAdd, units.added), 5);
+      document.getElementById('v2Input').value = fmtCleanInput(fromMl(v2, units.v2), 5);
+      document.getElementById('c2Input').value = fmtCleanInput(fromRaw(c2, countUnits.c2), countUnits.c2 === 'RAW' ? 0 : 4);
+      refreshDilutionSummary();
+    }
+    function onAddedVolChange() {
+      const vAdd = toMl(parseNum(document.getElementById('addedInput').value), units.added);
+      const v1 = getV1Ml(), c1 = getC1Raw(), v2 = v1 + vAdd, c2 = v2 > 0 ? (c1 * v1) / v2 : 0;
+      document.getElementById('v2Input').value = fmtCleanInput(fromMl(v2, units.v2), 5);
+      document.getElementById('c2Input').value = fmtCleanInput(fromRaw(c2, countUnits.c2), countUnits.c2 === 'RAW' ? 0 : 4);
+      updateMediaAndSerumFromV1V2(v1, v2, true);
+      refreshDilutionSummary();
+    }
+    function refreshDilutionSummary() {
+      ['v1', 'v2', 'media', 'serum', 'added'].forEach(f => {
+        const val = parseNum(document.getElementById(f + 'Input').value);
+        const ml = toMl(val, units[f]);
+        document.getElementById(f + 'Helper').textContent = val > 0 ? ('= ' + (units[f] === 'mL' ? fmt(ml / 1000, 5) + ' L' : fmt(ml, 3) + ' mL')) : '';
+      });
+      ['c1', 'c2'].forEach(f => {
+        const val = parseNum(document.getElementById(f + 'Input').value);
+        const raw = toRaw(val, countUnits[f]);
+        document.getElementById(f + 'Helper').textContent = val > 0 ? ('= ' + (countUnits[f] === 'MILLION' ? fmt(raw, 0) + ' عدد' : fmt(raw / 1e6, 4) + ' میلیون')) : '';
+      });
+      const v1 = getV1Ml(), v2 = getV2Ml(), media = toMl(parseNum(document.getElementById('mediaInput').value), units.media);
+      const serum = toMl(parseNum(document.getElementById('serumInput').value), units.serum);
+      const denom = Math.max(0.0001, v1 + media + serum);
+      document.getElementById('barCell').style.width = (v2 > 0 ? (v1 / denom) * 100 : 0) + '%';
+      document.getElementById('barMedia').style.width = (v2 > 0 ? (media / denom) * 100 : 0) + '%';
+      document.getElementById('barSerum').style.width = (v2 > 0 ? (serum / denom) * 100 : 0) + '%';
+
+      document.getElementById('sumMediaNum').textContent = document.getElementById('mediaInput').value || '0';
+      document.getElementById('sumMediaUnit').textContent = units.media;
+      document.getElementById('sumSerumNum').textContent = document.getElementById('serumInput').value || '0';
+      document.getElementById('sumSerumUnit').textContent = units.serum;
+      document.getElementById('sumV2Num').textContent = document.getElementById('v2Input').value || '0';
+      document.getElementById('sumV2Unit').textContent = units.v2;
+      document.getElementById('sumC2Num').textContent = document.getElementById('c2Input').value || '0';
+      document.getElementById('sumC2Unit').textContent = countUnits.c2 === 'MILLION' ? 'میلیون' : 'عدد کامل';
+      document.getElementById('centrifugeWarning').classList.toggle('hidden', !(getC1Raw() > 0 && getC2Raw() > getC1Raw()));
+    }
+    function saveDilutionToHistory() {
+      addHistoryItem('رقت و سرم', `V₁=${fmt(getV1Ml(), 2)}mL ← V₂=${fmt(getV2Ml(), 2)}mL | مدیا=${document.getElementById('mediaInput').value || 0}${units.media} | سرم=${document.getElementById('serumInput').value || 0}${units.serum}`);
+    }
+
+    // ==================== TAB 2: IMAGE COUNTER (CountThings-Style + Tap-to-Template) ====================
     let imgMarkerTool = 'LIVE';
     let imgResultUnit = 'MILLION';
     let uploadedSlideImg = null;
-    let webSensitivity = 0.78;
+    let showWebGrid = true;
+    let webSensitivity = 0.62;
     let webMarkerScale = 0.45;
+    let allSlideMarkers = []; // { x, y, live, conf }
     let slideMarkers = [];
+    let detectedVLines = [0.1, 0.3, 0.5, 0.7, 0.9];
+    let detectedHLines = [0.1, 0.3, 0.5, 0.7, 0.9];
+    let cvCache = null; // cached working canvas data for Tap-to-Template
 
-    function onWebSensChange(val) {
-      webSensitivity = Math.max(0.15, Math.min(0.98, Number(val) / 100));
-      document.getElementById('sensValLbl').textContent = Math.round(webSensitivity * 100) + '%';
-      if (uploadedSlideImg) autoDetectCellsFromImage(uploadedSlideImg);
+    function setMarkerTool(tool) {
+      imgMarkerTool = tool;
+      ['toolLiveBtn', 'toolDeadBtn', 'toolEraseBtn', 'toolTmplLiveBtn', 'toolTmplDeadBtn'].forEach(id => {
+        document.getElementById(id).classList.remove('active');
+      });
+      const map = { LIVE: 'toolLiveBtn', DEAD: 'toolDeadBtn', ERASE: 'toolEraseBtn', TMPL_LIVE: 'toolTmplLiveBtn', TMPL_DEAD: 'toolTmplDeadBtn' };
+      document.getElementById(map[tool]).classList.add('active');
+      document.getElementById('tmplHintBanner').classList.toggle('hidden', tool !== 'TMPL_LIVE' && tool !== 'TMPL_DEAD');
     }
-
+    function toggleWebGrid() {
+      showWebGrid = !showWebGrid;
+      document.getElementById('gridToggleBtn').classList.toggle('active', showWebGrid);
+      drawSlideCanvas();
+    }
+    function onWebSensChange(val) {
+      webSensitivity = Math.max(0.15, Math.min(0.95, Number(val) / 100));
+      document.getElementById('sensValLbl').textContent = Math.round(webSensitivity * 100) + '%';
+      applySensitivityFilter();
+    }
+    function applySensitivityFilter() {
+      const minConf = Math.round(webSensitivity * 100);
+      slideMarkers = allSlideMarkers.filter(m => (m.conf == null ? 100 : m.conf) >= minConf);
+      drawSlideCanvas();
+      recalcImageCount();
+    }
     function onWebMarkerScaleChange(val) {
       webMarkerScale = Math.max(0.20, Math.min(1.0, Number(val) / 100));
       document.getElementById('markerSizeLbl').textContent = Math.round(webMarkerScale * 100) + '%';
       drawSlideCanvas();
     }
-
-    function resetSampleSlide() {
-      uploadedSlideImg = null;
-      slideMarkers = [
-        { x: 0.16, y: 0.18, live: true }, { x: 0.24, y: 0.22, live: true },
-        { x: 0.34, y: 0.15, live: true }, { x: 0.46, y: 0.19, live: true },
-        { x: 0.58, y: 0.21, live: true }, { x: 0.71, y: 0.16, live: true },
-        { x: 0.81, y: 0.17, live: false }, { x: 0.19, y: 0.33, live: true },
-        { x: 0.29, y: 0.38, live: true }, { x: 0.43, y: 0.34, live: true },
-        { x: 0.54, y: 0.37, live: false }, { x: 0.66, y: 0.41, live: true },
-        { x: 0.77, y: 0.35, live: true }, { x: 0.84, y: 0.39, live: true },
-        { x: 0.18, y: 0.52, live: true }, { x: 0.31, y: 0.55, live: true },
-        { x: 0.39, y: 0.59, live: false }, { x: 0.51, y: 0.53, live: true },
-        { x: 0.61, y: 0.64, live: true }, { x: 0.73, y: 0.58, live: true },
-        { x: 0.82, y: 0.62, live: true }, { x: 0.22, y: 0.74, live: true },
-        { x: 0.35, y: 0.78, live: true }, { x: 0.48, y: 0.73, live: true },
-        { x: 0.59, y: 0.80, live: false }, { x: 0.69, y: 0.76, live: true },
-        { x: 0.79, y: 0.83, live: true }
-      ];
+    function undoLastWebMarker() {
+      if (slideMarkers.length === 0) return;
+      const last = slideMarkers.pop();
+      allSlideMarkers = allSlideMarkers.filter(m => m !== last);
       drawSlideCanvas();
       recalcImageCount();
     }
-
-    function setMarkerTool(tool) {
-      imgMarkerTool = tool;
-      document.getElementById('toolLiveBtn').classList.toggle('active', tool === 'LIVE');
-      document.getElementById('toolDeadBtn').classList.toggle('active', tool === 'DEAD');
-      document.getElementById('toolEraseBtn').classList.toggle('active', tool === 'ERASE');
-    }
-
     function clearSlideMarkers() {
+      allSlideMarkers = [];
       slideMarkers = [];
       drawSlideCanvas();
       recalcImageCount();
     }
-
     function handleSlideImageUpload(ev) {
       const file = ev.target.files && ev.target.files[0];
       if (!file) return;
@@ -465,111 +1066,255 @@
         const img = new Image();
         img.onload = function() {
           uploadedSlideImg = img;
-          autoDetectCellsFromImage(img);
+          const canvas = document.getElementById('slideCanvas');
+          const ratio = img.width / Math.max(1, img.height);
+          canvas.width = 720;
+          canvas.height = Math.round(720 / Math.max(0.55, Math.min(1.85, ratio)));
+          canvas.style.aspectRatio = `${img.width} / ${img.height}`;
+          prepareCvCache(img);
+          runCountThingsAutoCv();
         };
         img.src = e.target.result;
       };
       reader.readAsDataURL(file);
     }
-
-    function autoDetectCellsFromImage(img) {
-      const W = 256, H = 256;
+    function rerunImageAutoDetect() {
+      if (!uploadedSlideImg) return;
+      prepareCvCache(uploadedSlideImg);
+      runCountThingsAutoCv();
+    }
+    function prepareCvCache(img) {
+      const maxDim = 560;
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const W = Math.max(64, Math.round(img.width * scale));
+      const H = Math.max(64, Math.round(img.height * scale));
       const off = document.createElement('canvas');
       off.width = W; off.height = H;
       const ctx = off.getContext('2d');
       ctx.drawImage(img, 0, 0, W, H);
       const data = ctx.getImageData(0, 0, W, H).data;
-      const luma = new Float32Array(W * H);
+
+      const gray = new Float32Array(W * H);
       const blueEx = new Float32Array(W * H);
       const stride = W + 1;
-      const integral = new Float64Array((H + 1) * stride);
-
+      const intG = new Float64Array((H + 1) * stride);
+      const intB = new Float64Array((H + 1) * stride);
       for (let y = 0; y < H; y++) {
-        let rowSum = 0;
+        let rg = 0, rb = 0;
         for (let x = 0; x < W; x++) {
           const i = y * W + x;
           const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2];
-          const l = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-          luma[i] = l;
-          blueEx[i] = (b - 0.65 * r - 0.35 * g) / 255;
-          rowSum += l;
-          integral[(y + 1) * stride + x + 1] = integral[y * stride + x + 1] + rowSum;
+          const lv = 0.299 * r + 0.587 * g + 0.114 * b;
+          const bx = b - 0.55 * r - 0.45 * g;
+          gray[i] = lv; blueEx[i] = bx;
+          rg += lv; rb += bx;
+          intG[(y + 1) * stride + x + 1] = intG[y * stride + x + 1] + rg;
+          intB[(y + 1) * stride + x + 1] = intB[y * stride + x + 1] + rb;
         }
       }
-
-      function boxMean(cx, cy, rad) {
+      function meanBox(intArr, cx, cy, rad) {
         const x0 = Math.max(0, cx - rad), y0 = Math.max(0, cy - rad);
         const x1 = Math.min(W, cx + rad + 1), y1 = Math.min(H, cy + rad + 1);
-        const cnt = (x1 - x0) * (y1 - y0);
-        if (cnt <= 0) return 0;
-        const sum = integral[y1 * stride + x1] - integral[y0 * stride + x1] - integral[y1 * stride + x0] + integral[y0 * stride + x0];
-        return sum / cnt;
+        return (intArr[y1 * stride + x1] - intArr[y0 * stride + x1] - intArr[y1 * stride + x0] + intArr[y0 * stride + x0]) / Math.max(1, (x1 - x0) * (y1 - y0));
       }
 
-      const resp = new Float32Array(W * H);
-      const signedMap = new Float32Array(W * H);
-      let sumR = 0, sumSqR = 0, valid = 0;
-      const margin = 7;
+      const normSigned = new Float32Array(W * H);
+      const normBlue = new Float32Array(W * H);
+      const ocular = new Uint8Array(W * H);
+      const bgR = Math.max(12, Math.round(Math.max(W, H) * 0.032));
+      let centerSum = 0, centerCnt = 0;
+      for (let y = Math.floor(H * 0.25); y < Math.floor(H * 0.75); y++) {
+        for (let x = Math.floor(W * 0.25); x < Math.floor(W * 0.75); x++) { centerSum += gray[y * W + x]; centerCnt++; }
+      }
+      const ocularFloor = Math.min(55, Math.max(20, (centerSum / Math.max(1, centerCnt)) * 0.38));
 
-      for (let y = margin; y < H - margin; y++) {
-        for (let x = margin; x < W - margin; x++) {
-          const idx = y * W + x;
-          const dSmall = boxMean(x, y, 1) - boxMean(x, y, 4);
-          const dMed = boxMean(x, y, 2) - boxMean(x, y, 6);
-          const signed = Math.abs(dSmall) >= Math.abs(dMed) * 0.92 ? dSmall : dMed;
-          const mag = Math.abs(signed);
-          const c = luma[idx];
-          const dH = (Math.abs(c - luma[y * W + x - 3]) + Math.abs(c - luma[y * W + x + 3])) * 0.5;
-          const dV = (Math.abs(c - luma[(y - 3) * W + x]) + Math.abs(c - luma[(y + 3) * W + x])) * 0.5;
-          const dD1 = (Math.abs(c - luma[(y - 3) * W + x - 3]) + Math.abs(c - luma[(y + 3) * W + x + 3])) * 0.5;
-          const dD2 = (Math.abs(c - luma[(y - 3) * W + x + 3]) + Math.abs(c - luma[(y + 3) * W + x - 3])) * 0.5;
-          const iso = Math.min(1, Math.min(dH, dV) / Math.max(0.0001, dH, dV, dD1, dD2));
-          const s = mag * (0.45 + 0.55 * iso);
-          resp[idx] = s;
-          signedMap[idx] = signed;
-          sumR += s; sumSqR += s * s; valid++;
+      const absSamples = [];
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const i = y * W + x;
+          const ns = gray[i] - meanBox(intG, x, y, bgR);
+          normSigned[i] = ns;
+          normBlue[i] = blueEx[i] - meanBox(intB, x, y, bgR);
+          ocular[i] = meanBox(intG, x, y, 3) >= ocularFloor ? 1 : 0;
+          if (ocular[i] && x % 4 === 0 && y % 4 === 0) absSamples.push(Math.abs(ns));
         }
       }
+      absSamples.sort((a, b) => a - b);
+      const sigmaNoise = Math.max(3.5, Math.min(20, (absSamples[Math.floor(absSamples.length / 2)] || 6) * 1.4826));
 
-      const meanS = sumR / Math.max(1, valid);
-      const stdS = Math.sqrt(Math.max(1e-7, sumSqR / Math.max(1, valid) - meanS * meanS));
-      const zMult = Math.max(0.28, Math.min(2.3, 2.45 - webSensitivity * 2.15));
-      const thresh = Math.max(0.0045, meanS + zMult * stdS);
+      // Simple projection grid peak extraction
+      const colProj = new Float32Array(W), rowProj = new Float32Array(H);
+      for (let y = 10; y < H - 10; y++) {
+        for (let x = 10; x < W - 10; x++) {
+          const i = y * W + x;
+          if (ocular[i] && normSigned[i] > sigmaNoise * 1.7) { colProj[x]++; rowProj[y]++; }
+        }
+      }
+      function extractGridLines(proj, dim) {
+        const peaks = [];
+        for (let i = Math.round(dim * 0.05); i < Math.round(dim * 0.95); i++) {
+          if (proj[i] > dim * 0.16 && proj[i] >= proj[i - 1] && proj[i] >= proj[i + 1]) {
+            const norm = i / dim;
+            if (peaks.length === 0 || norm - peaks[peaks.length - 1] > 0.05) peaks.push(norm);
+          }
+        }
+        return peaks.length >= 2 ? peaks.slice(0, 7) : [0.1, 0.3, 0.5, 0.7, 0.9];
+      }
+      detectedVLines = extractGridLines(colProj, W);
+      detectedHLines = extractGridLines(rowProj, H);
+      cvCache = { W, H, normSigned, normBlue, ocular, sigmaNoise, meanBox, intG };
+    }
 
+    function checkRing360(normSigned, W, H, cx, cy, r, sigmaNoise) {
+      let coreSum = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) coreSum += normSigned[(cy + dy) * W + cx + dx];
+      const core = coreSum / 9;
+      let darkSec = 0;
+      const dirs = new Array(12).fill(false);
+      for (let s = 0; s < 12; s++) {
+        const th = (s * 30 * Math.PI) / 180, ct = Math.cos(th), st = Math.sin(th);
+        let minRay = 9999;
+        for (let sr = r * 0.75; sr <= r * 1.65; sr += 1.0) {
+          const sx = Math.max(0, Math.min(W - 1, Math.round(cx + ct * sr)));
+          const sy = Math.max(0, Math.min(H - 1, Math.round(cy + st * sr)));
+          const v = normSigned[sy * W + sx];
+          if (v < minRay) minRay = v;
+        }
+        if (minRay < -2.0 && (core - minRay) >= Math.max(9, sigmaNoise * 1.25)) {
+          dirs[s] = true; darkSec++;
+        }
+      }
+      let opp = 0;
+      for (let s = 0; s < 6; s++) if (dirs[s] && dirs[s + 6]) opp++;
+      return { darkSec, opp, core };
+    }
+
+    function runCountThingsAutoCv() {
+      if (!cvCache) return;
+      const { W, H, normSigned, normBlue, ocular, sigmaNoise } = cvCache;
       const cands = [];
-      for (let y = margin; y < H - margin; y++) {
-        for (let x = margin; x < W - margin; x++) {
-          const idx = y * W + x;
-          const s = resp[idx];
-          if (s < thresh) continue;
-          let peak = true;
-          for (let dy = -1; dy <= 1 && peak; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
-              if ((dx !== 0 || dy !== 0) && resp[(y + dy) * W + x + dx] > s) { peak = false; break; }
+      const margin = 10;
+      const scales = [3.2, 4.8, 6.8];
+      for (const r of scales) {
+        const rIn = Math.max(1, Math.round(r * 0.45)), rOut = Math.max(3, Math.round(r * 1.25));
+        for (let y = margin; y < H - margin; y++) {
+          for (let x = margin; x < W - margin; x++) {
+            const idx = y * W + x;
+            if (!ocular[idx] || normSigned[idx] < sigmaNoise * 0.7) continue;
+            // Fast inner vs ring check
+            const ring = checkRing360(normSigned, W, H, x, y, r, sigmaNoise);
+            if (ring.darkSec >= 7 && ring.opp >= 3) {
+              const conf = Math.min(98, Math.max(35, Math.round(35 + (ring.darkSec / 12) * 40 + Math.min(1, ring.core / (sigmaNoise * 4)) * 23)));
+              cands.push({ x: (x + 0.5) / W, y: (y + 0.5) / H, live: true, conf, score: ring.darkSec * 10 + ring.core, r });
             }
           }
-          if (!peak) continue;
-          const localBg = boxMean(x, y, 10);
-          const core = boxMean(x, y, 1);
-          const bEx = blueEx[idx];
-          const isDead = (core < localBg - stdS * 0.45 && signedMap[idx] < 0) || (bEx > 0.045 && core < localBg);
-          cands.push({ x, y, s, live: !isDead });
+        }
+      }
+      // Dead cells
+      for (let y = margin; y < H - margin; y++) {
+        for (let x = margin; x < W - margin; x++) {
+          const idx = y * W + x;
+          if (!ocular[idx]) continue;
+          const dark = -normSigned[idx] + Math.max(0, normBlue[idx]) * 0.4;
+          if (dark < Math.max(13, sigmaNoise * 1.9)) continue;
+          let isPeak = true;
+          for (let dy = -2; dy <= 2 && isPeak; dy++) {
+            for (let dx = -2; dx <= 2; dx++) {
+              if (dx === 0 && dy === 0) continue;
+              const nIdx = (y + dy) * W + x + dx;
+              if ((-normSigned[nIdx] + Math.max(0, normBlue[nIdx]) * 0.4) > dark) { isPeak = false; break; }
+            }
+          }
+          if (!isPeak || normSigned[idx] > -sigmaNoise) continue;
+          const conf = Math.min(96, Math.max(35, Math.round(35 + Math.min(1, dark / (sigmaNoise * 5)) * 60)));
+          cands.push({ x: (x + 0.5) / W, y: (y + 0.5) / H, live: false, conf, score: dark, r: 4 });
+        }
+      }
+      cands.sort((a, b) => b.score - a.score);
+      const kept = [];
+      for (const c of cands) {
+        if (kept.length >= 900) break;
+        const tooClose = kept.some(k => Math.hypot((k.x - c.x) * W, (k.y - c.y) * H) < 6.0);
+        if (!tooClose) kept.push({ x: c.x, y: c.y, live: c.live, conf: c.conf });
+      }
+      allSlideMarkers = kept;
+      applySensitivityFilter();
+    }
+
+    function runWebTemplateMatch(tapNx, tapNy, isLiveTempl) {
+      if (!cvCache) return;
+      const { W, H, normSigned, ocular, sigmaNoise } = cvCache;
+      const tx0 = Math.max(10, Math.min(W - 11, Math.round(tapNx * W)));
+      const ty0 = Math.max(10, Math.min(H - 11, Math.round(tapNy * H)));
+      // Snap to cell center
+      let bx = tx0, by = ty0, bestV = -1e9;
+      for (let dy = -9; dy <= 9; dy++) {
+        for (let dx = -9; dx <= 9; dx++) {
+          const px = Math.max(8, Math.min(W - 9, tx0 + dx)), py = Math.max(8, Math.min(H - 9, ty0 + dy));
+          const val = isLiveTempl ? normSigned[py * W + px] : -normSigned[py * W + px];
+          if (val - Math.hypot(dx, dy) * 0.8 > bestV) { bestV = val - Math.hypot(dx, dy) * 0.8; bx = px; by = py; }
+        }
+      }
+      const half = 6, size = half * 2 + 1;
+      const templ = new Float32Array(size * size);
+      let tMean = 0;
+      for (let dy = -half; dy <= half; dy++) {
+        for (let dx = -half; dx <= half; dx++) {
+          const v = normSigned[(by + dy) * W + (bx + dx)];
+          templ[(dy + half) * size + (dx + half)] = v; tMean += v;
+        }
+      }
+      tMean /= templ.length;
+      let tNorm = 0;
+      for (let i = 0; i < templ.length; i++) { templ[i] -= tMean; tNorm += templ[i] * templ[i]; }
+      tNorm = Math.sqrt(Math.max(1e-6, tNorm));
+
+      // Normalized Cross-Correlation (TM_CCOEFF_NORMED equivalent)
+      const ncc = new Float32Array(W * H);
+      for (let y = half + 1; y < H - half - 1; y++) {
+        for (let x = half + 1; x < W - half - 1; x++) {
+          const idx = y * W + x;
+          if (!ocular[idx]) continue;
+          if (isLiveTempl && normSigned[idx] < 3) continue;
+          if (!isLiveTempl && normSigned[idx] > -3) continue;
+          let pMean = 0;
+          for (let dy = -half; dy <= half; dy++) for (let dx = -half; dx <= half; dx++) pMean += normSigned[(y + dy) * W + x + dx];
+          pMean /= templ.length;
+          let num = 0, pNorm = 0;
+          for (let dy = -half; dy <= half; dy++) {
+            for (let dx = -half; dx <= half; dx++) {
+              const d = normSigned[(y + dy) * W + x + dx] - pMean;
+              num += d * templ[(dy + half) * size + (dx + half)];
+              pNorm += d * d;
+            }
+          }
+          ncc[idx] = num / (tNorm * Math.sqrt(Math.max(1e-6, pNorm)));
         }
       }
 
-      cands.sort((a, b) => b.s - a.s);
-      const minDist = Math.max(2.4, 3.8 - webSensitivity * 1.1);
-      const found = [];
-      for (const c of cands) {
-        if (found.length >= 800) break;
-        const nx = (c.x + 0.5) / W, ny = (c.y + 0.5) / H;
-        if (!found.some(m => Math.hypot((m.x - nx) * W, (m.y - ny) * H) < minDist)) {
-          found.push({ x: nx, y: ny, live: c.live });
+      const matched = [];
+      for (let y = half + 2; y < H - half - 2; y++) {
+        for (let x = half + 2; x < W - half - 2; x++) {
+          const idx = y * W + x, s = ncc[idx];
+          if (s < 0.42) continue;
+          let peak = true;
+          for (let dy = -2; dy <= 2 && peak; dy++) for (let dx = -2; dx <= 2; dx++) if ((dx || dy) && ncc[(y + dy) * W + x + dx] > s) peak = false;
+          if (!peak) continue;
+          if (isLiveTempl && checkRing360(normSigned, W, H, x, y, 4.8, sigmaNoise).darkSec < 5) continue;
+          const conf = Math.min(99, Math.max(25, Math.round(((s - 0.35) / 0.55) * 74 + 25)));
+          matched.push({ x: (x + 0.5) / W, y: (y + 0.5) / H, live: isLiveTempl, conf, score: s });
         }
       }
-      slideMarkers = found;
-      drawSlideCanvas();
-      recalcImageCount();
+      matched.sort((a, b) => b.score - a.score);
+      const kept = [];
+      for (const m of matched) {
+        if (!kept.some(k => Math.hypot((k.x - m.x) * W, (k.y - m.y) * H) < 6.0)) {
+          kept.push({ x: m.x, y: m.y, live: m.live, conf: m.conf });
+        }
+      }
+      allSlideMarkers = allSlideMarkers.filter(m => m.live !== isLiveTempl).concat(kept);
+      setMarkerTool(isLiveTempl ? 'LIVE' : 'DEAD');
+      applySensitivityFilter();
     }
 
     function drawSlideCanvas() {
@@ -582,32 +1327,32 @@
         ctx.drawImage(uploadedSlideImg, 0, 0, w, h);
       } else {
         const grad = ctx.createRadialGradient(w/2, h/2, 20, w/2, h/2, w*0.65);
-        grad.addColorStop(0, '#1E3A5F');
-        grad.addColorStop(1, '#0B1727');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, w, h);
+        grad.addColorStop(0, '#1E3A5F'); grad.addColorStop(1, '#0B1727');
+        ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText('عکس لام نئوبار را برای شمارش آفلاین انتخاب کنید', w / 2, h / 2);
       }
-      // Grid lines
-      ctx.strokeStyle = 'rgba(224, 242, 254, 0.38)';
-      ctx.lineWidth = 1.2;
-      const pad = w * 0.08, gw = w - pad * 2;
-      ctx.strokeRect(pad, pad, gw, gw);
-      for (let i = 1; i <= 3; i++) {
-        const p = pad + (gw / 4) * i;
-        ctx.beginPath(); ctx.moveTo(p, pad); ctx.lineTo(p, pad + gw); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(pad, p); ctx.lineTo(pad + gw, p); ctx.stroke();
+      if (showWebGrid) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.72)'; ctx.lineWidth = 2; ctx.setLineDash([10, 6]);
+        detectedVLines.forEach(nx => { ctx.beginPath(); ctx.moveTo(nx * w, h * 0.02); ctx.lineTo(nx * w, h * 0.98); ctx.stroke(); });
+        detectedHLines.forEach(ny => { ctx.beginPath(); ctx.moveTo(w * 0.02, ny * h); ctx.lineTo(w * 0.98, ny * h); ctx.stroke(); });
+        ctx.restore();
       }
-      // Compact Cell-Sized Markers
-      const r = Math.max(3.2, Math.min(12, w * (0.0052 + webMarkerScale * 0.0115)));
+      const r = Math.max(4, Math.min(16, w * (0.0052 + webMarkerScale * 0.0115)));
       slideMarkers.forEach(m => {
         const cx = m.x * w, cy = m.y * h;
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.fillStyle = m.live ? 'rgba(16, 185, 129, 0.16)' : 'rgba(239, 68, 68, 0.18)';
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fillStyle = m.live ? 'rgba(16, 185, 129, 0.18)' : 'rgba(239, 68, 68, 0.22)';
         ctx.fill();
-        ctx.lineWidth = Math.max(1.3, r * 0.26);
+        ctx.lineWidth = Math.max(1.5, r * 0.26);
         ctx.strokeStyle = m.live ? '#10B981' : '#EF4444';
         ctx.stroke();
+        if (!m.live) {
+          const d = r * 0.45;
+          ctx.beginPath(); ctx.moveTo(cx - d, cy - d); ctx.lineTo(cx + d, cy + d);
+          ctx.moveTo(cx + d, cy - d); ctx.lineTo(cx - d, cy + d); ctx.stroke();
+        }
       });
     }
 
@@ -616,322 +1361,500 @@
       const dead = slideMarkers.filter(m => !m.live).length;
       const total = live + dead;
       const viab = total > 0 ? (live * 100 / total) : 0;
-      const dil = Math.max(0.1, parseNum(document.getElementById('imgDilInput').value) || 1);
+      const dil = Math.max(1, parseNum(document.getElementById('imgDilInput').value) || 1);
       const sq = Math.max(0.1, parseNum(document.getElementById('imgSqInput').value) || 1);
       const rawPerMl = (live / sq) * dil * 10000;
       document.getElementById('imgLiveCnt').textContent = fmt(live, 0);
       document.getElementById('imgDeadCnt').textContent = fmt(dead, 0);
       document.getElementById('imgViabilityPct').textContent = fmt(viab, 1);
-      const disp = imgResultUnit === 'MILLION' ? fmt(rawPerMl / 1e6, 4) : fmt(rawPerMl, 0);
-      document.getElementById('imgViableConcNum').textContent = disp;
+      document.getElementById('imgViableConcNum').textContent = imgResultUnit === 'MILLION' ? fmt(rawPerMl / 1e6, 3) : fmt(rawPerMl, 0);
       document.getElementById('imgViableConcUnit').textContent = imgResultUnit === 'MILLION' ? '×10⁶/mL' : 'سلول/mL';
       document.getElementById('imgResUnitBtn').textContent = (imgResultUnit === 'MILLION' ? 'میلیون' : 'عدد کامل') + ' ⇄';
-    }
 
-    function toggleImgResultUnit() {
-      imgResultUnit = imgResultUnit === 'MILLION' ? 'RAW' : 'MILLION';
-      recalcImageCount();
+      // Update 4x4 Grid Table
+      const vb = detectedVLines.length >= 5 ? detectedVLines.slice(0, 5) : [0.1, 0.3, 0.5, 0.7, 0.9];
+      const hb = detectedHLines.length >= 5 ? detectedHLines.slice(0, 5) : [0.1, 0.3, 0.5, 0.7, 0.9];
+      const mLive = Array.from({ length: 4 }, () => [0, 0, 0, 0]);
+      const mDead = Array.from({ length: 4 }, () => [0, 0, 0, 0]);
+      slideMarkers.forEach(m => {
+        const c = m.x < vb[1] ? 0 : m.x < vb[2] ? 1 : m.x < vb[3] ? 2 : 3;
+        const r = m.y < hb[1] ? 0 : m.y < hb[2] ? 1 : m.y < hb[3] ? 2 : 3;
+        if (m.live) mLive[r][c]++; else mDead[r][c]++;
+      });
+      const cont = document.getElementById('grid4x4Container');
+      cont.innerHTML = '';
+      for (let r = 0; r < 4; r++) {
+        for (let c = 0; c < 4; c++) {
+          const l = mLive[r][c], d = mDead[r][c];
+          const div = document.createElement('div');
+          div.className = 'subsq-cell';
+          div.innerHTML = `<div style="font-size:0.65rem;color:var(--text-muted)">R${r+1}C${c+1}</div><div style="font-weight:800">${l+d}</div><div style="font-size:0.66rem;color:${d>0?'var(--red)':'var(--green)'}">+${l} / -${d}</div>`;
+          cont.appendChild(div);
+        }
+      }
+      document.getElementById('imgFormulaBox').innerHTML = `
+        <strong>فرمول محاسبه غلظت سلولی:</strong><br/>
+        غلظت زنده = (تعداد سلول زنده ÷ تعداد خانه) × ضریب رقت × ۱۰⁴<br/>
+        جایگذاری: (${live} ÷ ${sq}) × ${dil} × ۱۰,۰۰۰ = <strong>${fmt(rawPerMl, 0)} سلول/mL</strong> (${fmt(rawPerMl / 1e6, 3)} میلیون/mL)
+      `;
     }
-
+    function toggleImgResultUnit() { imgResultUnit = imgResultUnit === 'MILLION' ? 'RAW' : 'MILLION'; recalcImageCount(); }
+    function downloadAnnotatedWebSlide() {
+      const canvas = document.getElementById('slideCanvas');
+      const link = document.createElement('a');
+      link.download = `Neubauer_CellCount_${Date.now()}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
     function sendImageCountToDilution() {
       const live = slideMarkers.filter(m => m.live).length;
-      const dil = Math.max(0.1, parseNum(document.getElementById('imgDilInput').value) || 1);
+      const dil = Math.max(1, parseNum(document.getElementById('imgDilInput').value) || 1);
       const sq = Math.max(0.1, parseNum(document.getElementById('imgSqInput').value) || 1);
       const rawPerMl = (live / sq) * dil * 10000;
       if (rawPerMl > 0) {
-        document.getElementById('c1Input').value = fmt(fromRaw(rawPerMl, countUnits.c1), countUnits.c1 === 'RAW' ? 0 : 4);
-        recalcFromTargetCount();
-        switchTab('dilution');
+        document.getElementById('c1Input').value = fmtCleanInput(fromRaw(rawPerMl, countUnits.c1), countUnits.c1 === 'RAW' ? 0 : 4);
+        recalcFromStock(); switchTab('dilution');
+      }
+    }
+    function sendImageCountToMixer() {
+      const live = slideMarkers.filter(m => m.live).length;
+      const dil = Math.max(1, parseNum(document.getElementById('imgDilInput').value) || 1);
+      const sq = Math.max(0.1, parseNum(document.getElementById('imgSqInput').value) || 1);
+      const rawPerMl = (live / sq) * dil * 10000;
+      if (rawPerMl > 0) {
+        mixSamples.push({ v: '', vUnit: mixVolUnit, c: fmtCleanInput(fromRaw(rawPerMl, mixCountUnit), 4), cUnit: mixCountUnit });
+        switchTab('mixer');
       }
     }
 
-    function stripNum(str) {
-      if (!str) return '';
-      const persian = '۰۱۲۳۴۵۶۷۸۹';
-      const arabic = '٠١٢٣٤٥٦٧٨٩';
-      let out = '', hasDot = false;
-      for (const ch of String(str)) {
-        const p = persian.indexOf(ch);
-        if (p >= 0) { out += p; continue; }
-        const a = arabic.indexOf(ch);
-        if (a >= 0) { out += a; continue; }
-        if (ch === '.' || ch === '٫' || ch === '/') {
-          if (!hasDot) { out += '.'; hasDot = true; }
-        } else if (ch >= '0' && ch <= '9') {
-          out += ch;
-        }
-      }
-      return out;
-    }
-
-    function addCommasToStr(raw) {
-      const clean = stripNum(raw);
-      if (!clean) return '';
-      const parts = clean.split('.');
-      parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-      return parts.length > 1 ? parts[0] + '.' + parts[1] : parts[0];
-    }
-
-    function parseNum(str) {
-      const clean = stripNum(str);
-      return parseFloat(clean) || 0;
-    }
-
-    function fmt(n, d = 4) {
-      if (!isFinite(n) || n <= 0) return '0';
-      return addCommasToStr(Number(n.toFixed(d)).toString());
-    }
-
-    function handleNumericInput(el, callback) {
-      const cursor = el.selectionStart || 0;
-      const digitsBefore = stripNum(el.value.slice(0, cursor)).length;
-      const formatted = addCommasToStr(el.value);
-      el.value = formatted;
-      let newPos = 0, seen = 0;
-      while (newPos < formatted.length && seen < digitsBefore) {
-        if (formatted[newPos] !== ',') seen++;
-        newPos++;
-      }
-      el.setSelectionRange(newPos, newPos);
-      if (callback) callback();
-    }
-
-    function toMl(val, u) { return u === 'L' ? val * 1000 : val; }
-    function fromMl(ml, u) { return u === 'L' ? ml / 1000 : ml; }
-    function toRaw(val, u) { return u === 'MILLION' ? val * 1e6 : val; }
-    function fromRaw(raw, u) { return u === 'MILLION' ? raw / 1e6 : Math.round(raw); }
-
-    function toggleTheme() {
-      document.body.classList.toggle('dark');
-      const isDark = document.body.classList.contains('dark');
-      document.getElementById('themeBtn').textContent = isDark ? '☀️ حالت روز' : '🌙 حالت شب';
-      document.getElementById('themeSubtitle').textContent = 'By M. Hsn • ' + (isDark ? 'حالت شب فعال' : 'حالت روز فعال');
-    }
-
-    function switchTab(tab) {
-      document.getElementById('tab-dilution').classList.toggle('hidden', tab !== 'dilution');
-      document.getElementById('tab-image').classList.toggle('hidden', tab !== 'image');
-      document.getElementById('tab-mixer').classList.toggle('hidden', tab !== 'mixer');
-      document.getElementById('navDil').classList.toggle('active', tab === 'dilution');
-      document.getElementById('navImg').classList.toggle('active', tab === 'image');
-      document.getElementById('navMix').classList.toggle('active', tab === 'mixer');
-      if (tab === 'mixer') renderMixer();
-      if (tab === 'image') { drawSlideCanvas(); recalcImageCount(); }
-    }
-
-    function toggleUnit(field) {
-      const inp = document.getElementById(field + 'Input');
-      const ml = toMl(parseNum(inp.value), units[field]);
-      units[field] = units[field] === 'mL' ? 'L' : 'mL';
-      inp.value = fmt(fromMl(ml, units[field]), 5);
-      document.getElementById(field + 'UnitBtn').textContent = units[field] + ' ⇄';
-      refreshHelpers();
-    }
-
-    function toggleCountUnit(field) {
-      const inp = document.getElementById(field + 'Input');
-      const raw = toRaw(parseNum(inp.value), countUnits[field]);
-      countUnits[field] = countUnits[field] === 'MILLION' ? 'RAW' : 'MILLION';
-      inp.value = fmt(fromRaw(raw, countUnits[field]), countUnits[field] === 'RAW' ? 0 : 4);
-      document.getElementById(field + 'UnitBtn').textContent = (countUnits[field] === 'MILLION' ? 'میلیون' : 'عدد کامل') + ' ⇄';
-      refreshHelpers();
-    }
-
-    function setGlobalVolUnit(u) {
-      ['v1', 'v2', 'media', 'serum'].forEach(f => {
-        if (units[f] !== u) toggleUnit(f);
-      });
-      document.getElementById('volBtnML').classList.toggle('active', u === 'mL');
-      document.getElementById('volBtnL').classList.toggle('active', u === 'L');
-    }
-
-    function setGlobalCountUnit(u) {
-      ['c1', 'c2'].forEach(f => {
-        if (countUnits[f] !== u) toggleCountUnit(f);
-      });
-      document.getElementById('cntBtnMil').classList.toggle('active', u === 'MILLION');
-      document.getElementById('cntBtnRaw').classList.toggle('active', u === 'RAW');
-    }
-
-    function onV1Change() { recalcFromTargetCount(); }
-    function onC1Change() { recalcFromTargetCount(); }
-    function onC2Change() { recalcFromTargetCount(); }
-
-    function recalcFromTargetCount() {
-      const v1Ml = toMl(parseNum(document.getElementById('v1Input').value), units.v1);
-      const c1Raw = toRaw(parseNum(document.getElementById('c1Input').value), countUnits.c1);
-      const c2Raw = toRaw(parseNum(document.getElementById('c2Input').value), countUnits.c2);
-      if (c1Raw > 0 && c2Raw > 0) {
-        const v2Ml = (c1Raw * v1Ml) / c2Raw;
-        document.getElementById('v2Input').value = fmt(fromMl(v2Ml, units.v2), 5);
-        updateMediaSerum(v1Ml, v2Ml);
-      }
-      refreshHelpers();
-    }
-
-    function onV2Change() {
-      const v1Ml = toMl(parseNum(document.getElementById('v1Input').value), units.v1);
-      const c1Raw = toRaw(parseNum(document.getElementById('c1Input').value), countUnits.c1);
-      const v2Ml = toMl(parseNum(document.getElementById('v2Input').value), units.v2);
-      if (v2Ml > 0 && c1Raw > 0) {
-        const c2Raw = (c1Raw * v1Ml) / v2Ml;
-        document.getElementById('c2Input').value = fmt(fromRaw(c2Raw, countUnits.c2), countUnits.c2 === 'RAW' ? 0 : 4);
-        updateMediaSerum(v1Ml, v2Ml);
-      }
-      refreshHelpers();
-    }
-
-    function setSerumPct(p) {
-      document.getElementById('serumPctInput').value = String(p);
-      onSerumPctChange();
-    }
-
-    function onSerumPctChange() {
-      const v1Ml = toMl(parseNum(document.getElementById('v1Input').value), units.v1);
-      const v2Ml = toMl(parseNum(document.getElementById('v2Input').value), units.v2);
-      updateMediaSerum(v1Ml, v2Ml);
-      refreshHelpers();
-    }
-
-    function updateMediaSerum(v1Ml, v2Ml) {
-      const sPct = Math.min(100, Math.max(0, parseNum(document.getElementById('serumPctInput').value)));
-      const addMl = Math.max(0, v2Ml - v1Ml);
-      const serumMl = addMl * (sPct / 100);
-      const mediaMl = Math.max(0, addMl - serumMl);
-      document.getElementById('mediaInput').value = fmt(fromMl(mediaMl, units.media), 5);
-      document.getElementById('serumInput').value = fmt(fromMl(serumMl, units.serum), 5);
-    }
-
-    function onMediaChange() {
-      const v1Ml = toMl(parseNum(document.getElementById('v1Input').value), units.v1);
-      const c1Raw = toRaw(parseNum(document.getElementById('c1Input').value), countUnits.c1);
-      const mediaMl = toMl(parseNum(document.getElementById('mediaInput').value), units.media);
-      const sFrac = Math.min(0.999, Math.max(0, parseNum(document.getElementById('serumPctInput').value) / 100));
-      const addMl = mediaMl / (1 - sFrac);
-      const serumMl = Math.max(0, addMl - mediaMl);
-      const v2Ml = v1Ml + addMl;
-      const c2Raw = v2Ml > 0 ? (c1Raw * v1Ml) / v2Ml : 0;
-      document.getElementById('serumInput').value = fmt(fromMl(serumMl, units.serum), 5);
-      document.getElementById('v2Input').value = fmt(fromMl(v2Ml, units.v2), 5);
-      document.getElementById('c2Input').value = fmt(fromRaw(c2Raw, countUnits.c2), countUnits.c2 === 'RAW' ? 0 : 4);
-      refreshHelpers();
-    }
-
-    function onSerumVolChange() {
-      const v1Ml = toMl(parseNum(document.getElementById('v1Input').value), units.v1);
-      const c1Raw = toRaw(parseNum(document.getElementById('c1Input').value), countUnits.c1);
-      const serumMl = toMl(parseNum(document.getElementById('serumInput').value), units.serum);
-      const sFrac = Math.min(1, Math.max(0.0001, parseNum(document.getElementById('serumPctInput').value) / 100));
-      const addMl = serumMl / sFrac;
-      const mediaMl = Math.max(0, addMl - serumMl);
-      const v2Ml = v1Ml + addMl;
-      const c2Raw = v2Ml > 0 ? (c1Raw * v1Ml) / v2Ml : 0;
-      document.getElementById('mediaInput').value = fmt(fromMl(mediaMl, units.media), 5);
-      document.getElementById('v2Input').value = fmt(fromMl(v2Ml, units.v2), 5);
-      document.getElementById('c2Input').value = fmt(fromRaw(c2Raw, countUnits.c2), countUnits.c2 === 'RAW' ? 0 : 4);
-      refreshHelpers();
-    }
-
-    function refreshHelpers() {
-      ['v1', 'v2', 'media', 'serum'].forEach(f => {
-        const val = parseNum(document.getElementById(f + 'Input').value);
-        const ml = toMl(val, units[f]);
-        const opp = units[f] === 'mL' ? fmt(ml / 1000, 5) + ' L' : fmt(ml, 3) + ' mL';
-        document.getElementById(f + 'Helper').textContent = '= ' + opp;
-      });
-      ['c1', 'c2'].forEach(f => {
-        const val = parseNum(document.getElementById(f + 'Input').value);
-        const raw = toRaw(val, countUnits[f]);
-        const opp = countUnits[f] === 'MILLION' ? fmt(raw, 0) + ' عدد کامل' : fmt(raw / 1e6, 4) + ' میلیون';
-        document.getElementById(f + 'Helper').textContent = '= ' + opp;
-      });
-      document.getElementById('sumMediaNum').textContent = document.getElementById('mediaInput').value;
-      document.getElementById('sumMediaUnit').textContent = units.media;
-      document.getElementById('sumSerumNum').textContent = document.getElementById('serumInput').value;
-      document.getElementById('sumSerumUnit').textContent = units.serum;
-      document.getElementById('sumV2Num').textContent = document.getElementById('v2Input').value;
-      document.getElementById('sumV2Unit').textContent = units.v2;
-      document.getElementById('sumC2Num').textContent = document.getElementById('c2Input').value;
-      document.getElementById('sumC2Unit').textContent = countUnits.c2 === 'MILLION' ? 'میلیون' : 'عدد کامل';
-    }
-
+    // ==================== TAB 3: CELL MIXER ====================
+    let mixVolUnit = 'mL', mixCountUnit = 'MILLION', mixExtraUnit = 'mL';
+    let mixSamples = [
+      { v: '', vUnit: 'mL', c: '', cUnit: 'MILLION' },
+      { v: '', vUnit: 'mL', c: '', cUnit: 'MILLION' }
+    ];
     function renderMixer() {
-      const container = document.getElementById('mixerSamplesList');
-      container.innerHTML = '';
-      let totalMl = 0, totalRaw = 0;
+      const cont = document.getElementById('mixerSamplesList');
+      cont.innerHTML = '';
       mixSamples.forEach((s, idx) => {
-        const ml = toMl(s.v, s.vUnit);
-        const raw = toRaw(s.c, s.cUnit);
-        totalMl += ml;
-        totalRaw += ml * raw;
-        const row = document.createElement('div');
-        row.className = 'grid-2';
-        row.innerHTML = `
-          <div class="field">
-            <label>حجم نمونه ${idx + 1}</label>
-            <div class="input-wrap">
-              <input type="text" inputmode="decimal" value="${addCommasToStr(s.v)}" oninput="handleNumericInput(this, () => updateMixV(${idx}, this.value))" />
-              <button class="unit-pill" onclick="toggleSampleVUnit(${idx})">${s.vUnit} ⇄</button>
-            </div>
+        const div = document.createElement('div');
+        div.className = 'tile';
+        div.innerHTML = `
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <strong style="font-size:0.82rem;">نمونه سلولی ${idx + 1}</strong>
+            ${mixSamples.length > 1 ? `<button class="btn-danger" onclick="removeMixSample(${idx})">حذف</button>` : ''}
           </div>
-          <div class="field">
-            <label>کانت نمونه ${idx + 1}</label>
-            <div class="input-wrap">
-              <input type="text" inputmode="decimal" value="${addCommasToStr(s.c)}" oninput="handleNumericInput(this, () => updateMixC(${idx}, this.value))" />
-              <button class="unit-pill" onclick="toggleSampleCUnit(${idx})">${s.cUnit === 'MILLION' ? 'میلیون' : 'عدد کامل'} ⇄</button>
-            </div>
+          <div class="grid-2">
+            <div class="field"><label>حجم</label><div class="input-wrap"><input type="text" inputmode="decimal" value="${s.v}" placeholder="حجم" oninput="handleNumericInput(this, () => { mixSamples[${idx}].v = this.value; renderMixerTotalsOnly(); })" /><button class="unit-pill" onclick="toggleMixSampleVUnit(${idx})">${s.vUnit} ⇄</button></div></div>
+            <div class="field"><label>کانت</label><div class="input-wrap"><input type="text" inputmode="decimal" value="${s.c}" placeholder="کانت" oninput="handleNumericInput(this, () => { mixSamples[${idx}].c = this.value; renderMixerTotalsOnly(); })" /><button class="unit-pill" onclick="toggleMixSampleCUnit(${idx})">${s.cUnit === 'MILLION' ? 'میلیون' : 'عدد کامل'} ⇄</button></div></div>
           </div>`;
-        container.appendChild(row);
+        cont.appendChild(div);
       });
-      const finalRawPerMl = totalMl > 0 ? totalRaw / totalMl : 0;
+      renderMixerTotalsOnly();
+    }
+    function renderMixerTotalsOnly() {
+      let totalCellMl = 0, totalAbs = 0;
+      mixSamples.forEach(s => {
+        const ml = toMl(parseNum(s.v), s.vUnit), raw = toRaw(parseNum(s.c), s.cUnit);
+        totalCellMl += ml; totalAbs += ml * raw;
+      });
+      const extraMl = toMl(parseNum(document.getElementById('mixExtraMediaInput').value), mixExtraUnit);
+      const totalMl = totalCellMl + extraMl;
+      const finalPerMl = totalMl > 0 ? totalAbs / totalMl : 0;
       document.getElementById('mixFinalVolNum').textContent = fmt(fromMl(totalMl, mixVolUnit), 4);
       document.getElementById('mixFinalVolUnit').textContent = mixVolUnit;
-      document.getElementById('mixFinalCountNum').textContent = fmt(fromRaw(finalRawPerMl, mixCountUnit), mixCountUnit === 'RAW' ? 0 : 4);
+      document.getElementById('mixFinalCountNum').textContent = fmt(fromRaw(finalPerMl, mixCountUnit), mixCountUnit === 'RAW' ? 0 : 4);
       document.getElementById('mixFinalCountUnit').textContent = mixCountUnit === 'MILLION' ? 'میلیون' : 'عدد کامل';
     }
-    function updateMixV(i, val) { mixSamples[i].v = parseNum(val); }
-    function updateMixC(i, val) { mixSamples[i].c = parseNum(val); }
-    function toggleSampleVUnit(i) {
-      const s = mixSamples[i];
-      const ml = toMl(s.v, s.vUnit);
-      s.vUnit = s.vUnit === 'mL' ? 'L' : 'mL';
-      s.v = parseNum(fmt(fromMl(ml, s.vUnit), 5));
-      renderMixer();
+    function toggleMixSampleVUnit(i) { const s = mixSamples[i]; const ml = toMl(parseNum(s.v), s.vUnit); s.vUnit = s.vUnit === 'mL' ? 'L' : 'mL'; if (s.v) s.v = fmtCleanInput(fromMl(ml, s.vUnit), 5); renderMixer(); }
+    function toggleMixSampleCUnit(i) { const s = mixSamples[i]; const raw = toRaw(parseNum(s.c), s.cUnit); s.cUnit = s.cUnit === 'MILLION' ? 'RAW' : 'MILLION'; if (s.c) s.c = fmtCleanInput(fromRaw(raw, s.cUnit), s.cUnit === 'RAW' ? 0 : 4); renderMixer(); }
+    function toggleMixExtraUnit() { const inp = document.getElementById('mixExtraMediaInput'); const ml = toMl(parseNum(inp.value), mixExtraUnit); mixExtraUnit = mixExtraUnit === 'mL' ? 'L' : 'mL'; if (inp.value) inp.value = fmtCleanInput(fromMl(ml, mixExtraUnit), 5); document.getElementById('mixExtraUnitBtn').textContent = mixExtraUnit + ' ⇄'; renderMixerTotalsOnly(); }
+    function toggleMixVolUnit() { mixVolUnit = mixVolUnit === 'mL' ? 'L' : 'mL'; renderMixerTotalsOnly(); }
+    function toggleMixCountUnit() { mixCountUnit = mixCountUnit === 'MILLION' ? 'RAW' : 'MILLION'; renderMixerTotalsOnly(); }
+    function addMixSample() { mixSamples.push({ v: '', vUnit: mixVolUnit, c: '', cUnit: mixCountUnit }); renderMixer(); }
+    function removeMixSample(i) { mixSamples.splice(i, 1); renderMixer(); }
+    function sendMixToDilution() {
+      let totalCellMl = 0, totalAbs = 0;
+      mixSamples.forEach(s => { const ml = toMl(parseNum(s.v), s.vUnit); totalCellMl += ml; totalAbs += ml * toRaw(parseNum(s.c), s.cUnit); });
+      const totalMl = totalCellMl + toMl(parseNum(document.getElementById('mixExtraMediaInput').value), mixExtraUnit);
+      const finalPerMl = totalMl > 0 ? totalAbs / totalMl : 0;
+      if (totalMl > 0) document.getElementById('v1Input').value = fmtCleanInput(fromMl(totalMl, units.v1), 5);
+      if (finalPerMl > 0) document.getElementById('c1Input').value = fmtCleanInput(fromRaw(finalPerMl, countUnits.c1), 4);
+      recalcFromStock(); switchTab('dilution');
     }
-    function toggleSampleCUnit(i) {
-      const s = mixSamples[i];
-      const raw = toRaw(s.c, s.cUnit);
-      s.cUnit = s.cUnit === 'MILLION' ? 'RAW' : 'MILLION';
-      s.c = parseNum(fmt(fromRaw(raw, s.cUnit), s.cUnit === 'RAW' ? 0 : 4));
-      renderMixer();
+    function saveMixToHistory() {
+      addHistoryItem('میکس سلولی', `حجم کل=${document.getElementById('mixFinalVolNum').textContent} ${mixVolUnit} | کانت نهایی=${document.getElementById('mixFinalCountNum').textContent} ${mixCountUnit === 'MILLION' ? 'میلیون' : 'عدد'}`);
     }
-    function toggleMixVolUnit() { mixVolUnit = mixVolUnit === 'mL' ? 'L' : 'mL'; renderMixer(); }
-    function toggleMixCountUnit() { mixCountUnit = mixCountUnit === 'MILLION' ? 'RAW' : 'MILLION'; renderMixer(); }
-    function addMixSample() { mixSamples.push({ v: 1, vUnit: mixVolUnit, c: 1, cUnit: mixCountUnit }); renderMixer(); }
 
-    // Canvas click listener
+    // ==================== TAB 4: NEUBAUER COUNTER ====================
+    let neuSquares = [{ live: '', dead: '' }, { live: '', dead: '' }, { live: '', dead: '' }, { live: '', dead: '' }];
+    let neuVolUnit = 'mL', neuResUnit = 'MILLION';
+    function renderNeubauerSquares() {
+      const cont = document.getElementById('neubauerSquaresList');
+      cont.innerHTML = '';
+      neuSquares.forEach((sq, idx) => {
+        const div = document.createElement('div');
+        div.className = 'tile';
+        div.innerHTML = `
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <strong style="font-size:0.82rem;">خانه ${idx + 1}</strong>
+            ${neuSquares.length > 1 ? `<button class="btn-danger" onclick="removeNeuSq(${idx})">حذف</button>` : ''}
+          </div>
+          <div class="grid-2">
+            <div class="field"><label>سلول زنده</label><div class="input-wrap"><input type="text" inputmode="decimal" value="${sq.live}" placeholder="0" oninput="handleNumericInput(this, () => { neuSquares[${idx}].live = this.value; recalcNeubauer(); })" /><span class="unit-pill">زنده</span></div></div>
+            <div class="field"><label>سلول مرده</label><div class="input-wrap"><input type="text" inputmode="decimal" value="${sq.dead}" placeholder="0" oninput="handleNumericInput(this, () => { neuSquares[${idx}].dead = this.value; recalcNeubauer(); })" /><span class="unit-pill">مرده</span></div></div>
+          </div>`;
+        cont.appendChild(div);
+      });
+    }
+    function addNeubauerSquare() { neuSquares.push({ live: '', dead: '' }); renderNeubauerSquares(); recalcNeubauer(); }
+    function removeNeuSq(i) { neuSquares.splice(i, 1); renderNeubauerSquares(); recalcNeubauer(); }
+    function clearNeubauerSquares() { neuSquares.forEach(s => { s.live = ''; s.dead = ''; }); renderNeubauerSquares(); recalcNeubauer(); }
+    function toggleNeubauerResultUnit() { neuResUnit = neuResUnit === 'MILLION' ? 'RAW' : 'MILLION'; recalcNeubauer(); }
+    function toggleNeuVolUnit() { const inp = document.getElementById('neuVolInput'); const ml = toMl(parseNum(inp.value), neuVolUnit); neuVolUnit = neuVolUnit === 'mL' ? 'L' : 'mL'; if (inp.value) inp.value = fmtCleanInput(fromMl(ml, neuVolUnit), 5); document.getElementById('neuVolUnitBtn').textContent = neuVolUnit + ' ⇄'; recalcNeubauer(); }
+    function getNeubauerMetrics() {
+      const liveSum = neuSquares.reduce((a, s) => a + parseNum(s.live), 0);
+      const deadSum = neuSquares.reduce((a, s) => a + parseNum(s.dead), 0);
+      const avgLive = liveSum / Math.max(1, neuSquares.length);
+      const dil = Math.max(1, parseNum(document.getElementById('neuDilInput').value) || 1);
+      const viablePerMl = avgLive * dil * 10000;
+      const viab = (liveSum + deadSum) > 0 ? (liveSum * 100 / (liveSum + deadSum)) : 0;
+      const volMl = toMl(parseNum(document.getElementById('neuVolInput').value), neuVolUnit);
+      return { liveSum, deadSum, avgLive, viablePerMl, viab, totalInSample: viablePerMl * volMl, volMl };
+    }
+    function recalcNeubauer() {
+      const m = getNeubauerMetrics();
+      document.getElementById('neuViableConc').textContent = fmt(fromRaw(m.viablePerMl, neuResUnit), neuResUnit === 'RAW' ? 0 : 3);
+      document.getElementById('neuViableUnit').textContent = neuResUnit === 'MILLION' ? 'میلیون/mL' : 'سلول/mL';
+      document.getElementById('neuResUnitBtn').textContent = (neuResUnit === 'MILLION' ? 'میلیون' : 'عدد کامل') + ' ⇄';
+      document.getElementById('neuViabilityPct').textContent = fmt(m.viab, 1);
+      document.getElementById('neuAvgPerSq').textContent = fmt(m.avgLive, 1);
+      document.getElementById('neuTotalInSample').textContent = fmt(m.totalInSample / 1e6, 3);
+    }
+    function sendNeubauerToDilution() {
+      const m = getNeubauerMetrics();
+      if (m.volMl > 0) document.getElementById('v1Input').value = fmtCleanInput(fromMl(m.volMl, units.v1), 5);
+      if (m.viablePerMl > 0) document.getElementById('c1Input').value = fmtCleanInput(fromRaw(m.viablePerMl, countUnits.c1), 4);
+      recalcFromStock(); switchTab('dilution');
+    }
+    function sendNeubauerToMixer() {
+      const m = getNeubauerMetrics();
+      if (m.viablePerMl > 0) {
+        mixSamples.push({ v: m.volMl > 0 ? fmtCleanInput(fromMl(m.volMl, mixVolUnit), 4) : '', vUnit: mixVolUnit, c: fmtCleanInput(fromRaw(m.viablePerMl, mixCountUnit), 4), cUnit: mixCountUnit });
+        switchTab('mixer');
+      }
+    }
+    function saveNeubauerToHistory() {
+      const m = getNeubauerMetrics();
+      addHistoryItem('شمارش نئوبار', `کانت زنده=${fmt(m.viablePerMl / 1e6, 3)} میلیون/mL | زنده‌مانی=${fmt(m.viab, 1)}%`);
+    }
+
+    // ==================== TAB 5: CELL GROWTH PREDICTOR (BHK + BIOREACTORS) ====================
+    const CELL_LINES = [
+      { id: 'BHK21_C13', name: 'BHK-21 (C-13)', td: 13.5, lag: 3 },
+      { id: 'BHK21_SUSP', name: 'BHK-21 (Susp)', td: 16.0, lag: 2 },
+      { id: 'BHK21_CL13', name: 'BHK-21 Clone 13', td: 14.0, lag: 3 },
+      { id: 'BHK_BSR', name: 'BHK BSR-T7/5', td: 15.0, lag: 3 },
+      { id: 'HELA', name: 'HeLa', td: 24.0, lag: 4 },
+      { id: 'HEK293', name: 'HEK293', td: 20.0, lag: 4 },
+      { id: 'CHO', name: 'CHO', td: 16.0, lag: 3 },
+      { id: 'NIH3T3', name: 'NIH-3T3', td: 18.0, lag: 4 },
+      { id: 'MCF7', name: 'MCF-7', td: 29.0, lag: 6 },
+      { id: 'JURKAT', name: 'Jurkat', td: 21.0, lag: 2 },
+      { id: 'MSC', name: 'MSC', td: 36.0, lag: 6 }
+    ];
+    const VESSELS = [
+      { id: 'P6', name: 'پلیت ۶ خانه', wells: 6, volMl: 2.0, seedM: 0.3, maxM: 1.2 },
+      { id: 'P12', name: 'پلیت ۱۲ خانه', wells: 12, volMl: 1.0, seedM: 0.12, maxM: 0.5 },
+      { id: 'P24', name: 'پلیت ۲۴ خانه', wells: 24, volMl: 0.5, seedM: 0.06, maxM: 0.24 },
+      { id: 'P96', name: 'پلیت ۹۶ خانه', wells: 96, volMl: 0.1, seedM: 0.01, maxM: 0.04 },
+      { id: 'T25', name: 'فلاسک T25', wells: 1, volMl: 5.0, seedM: 0.7, maxM: 2.8 },
+      { id: 'T75', name: 'فلاسک T75', wells: 1, volMl: 12.0, seedM: 2.1, maxM: 8.4 },
+      { id: 'T175', name: 'فلاسک T175', wells: 1, volMl: 25.0, seedM: 4.9, maxM: 20.0 },
+      { id: 'BR100', name: 'بیوراکتور 100L', wells: 1, volMl: 100000, seedM: 50000, maxM: 300000 },
+      { id: 'BR700', name: 'بیوراکتور 700L', wells: 1, volMl: 700000, seedM: 350000, maxM: 2100000 },
+      { id: 'BR1500', name: 'بیوراکتور 1500L', wells: 1, volMl: 1500000, seedM: 750000, maxM: 4500000 },
+      { id: 'BR2700', name: 'بیوراکتور 2700L', wells: 1, volMl: 2700000, seedM: 1350000, maxM: 8100000 }
+    ];
+    let selectedCellLineId = 'BHK21_C13', selectedVesselId = 'T25';
+    const grUnits = { N0: 'MILLION', K: 'MILLION', RES: 'MILLION' };
+
+    function renderGrowthAndSeedingChips() {
+      const clCont = document.getElementById('cellLineChips');
+      clCont.innerHTML = '';
+      CELL_LINES.forEach(cl => {
+        const b = document.createElement('button');
+        b.className = 'chip' + (cl.id === selectedCellLineId ? ' active' : '');
+        b.textContent = `${cl.name} (${cl.td}h)`;
+        b.onclick = () => {
+          selectedCellLineId = cl.id;
+          document.getElementById('grTdInput').value = String(cl.td);
+          document.getElementById('grLagInput').value = String(cl.lag);
+          renderGrowthAndSeedingChips(); recalcGrowth();
+        };
+        clCont.appendChild(b);
+      });
+
+      const vCont = document.getElementById('vesselChips');
+      const sCont = document.getElementById('seedingVesselChips');
+      vCont.innerHTML = ''; sCont.innerHTML = '';
+      VESSELS.forEach(v => {
+        const b1 = document.createElement('button');
+        b1.className = 'chip' + (v.id === selectedVesselId ? ' active' : '');
+        b1.textContent = v.name;
+        b1.onclick = () => {
+          selectedVesselId = v.id;
+          document.getElementById('grKInput').value = fmtCleanInput(fromRaw(v.maxM * 1e6, grUnits.K), 2);
+          renderGrowthAndSeedingChips(); recalcGrowth();
+        };
+        vCont.appendChild(b1);
+
+        const b2 = document.createElement('button');
+        b2.className = 'chip' + (v.id === selectedSeedingVesselId ? ' active' : '');
+        b2.textContent = v.name;
+        b2.onclick = () => {
+          selectedSeedingVesselId = v.id;
+          document.getElementById('seedWellsInput').value = String(v.wells);
+          document.getElementById('seedVolInput').value = fmtCleanInput(fromMl(v.volMl, seedVolUnit), 4);
+          document.getElementById('seedTargetInput').value = fmtCleanInput(fromRaw(v.seedM * 1e6, seedTargetUnit), 4);
+          renderGrowthAndSeedingChips(); recalcSeeding();
+        };
+        sCont.appendChild(b2);
+      });
+    }
+    function toggleGrowthUnit(which) {
+      if (which === 'RES') {
+        grUnits.RES = grUnits.RES === 'MILLION' ? 'RAW' : 'MILLION';
+        document.getElementById('grResUnitBtn').textContent = (grUnits.RES === 'MILLION' ? 'میلیون' : 'عدد کامل') + ' ⇄';
+      } else {
+        const id = which === 'N0' ? 'grN0Input' : 'grKInput';
+        const btn = which === 'N0' ? 'grN0UnitBtn' : 'grKUnitBtn';
+        const inp = document.getElementById(id);
+        const raw = toRaw(parseNum(inp.value), grUnits[which]);
+        grUnits[which] = grUnits[which] === 'MILLION' ? 'RAW' : 'MILLION';
+        if (inp.value) inp.value = fmtCleanInput(fromRaw(raw, grUnits[which]), grUnits[which] === 'RAW' ? 0 : 4);
+        document.getElementById(btn).textContent = (grUnits[which] === 'MILLION' ? 'میلیون' : 'عدد کامل') + ' ⇄';
+      }
+      recalcGrowth();
+    }
+    function calcLogistic(n0, k, td, lag, h) {
+      if (n0 <= 0) return 0;
+      const tEff = Math.max(0, h - lag);
+      if (k <= 0) return n0 * Math.pow(2, tEff / td);
+      if (n0 >= k) return k;
+      return k / (1 + ((k - n0) / n0) * Math.pow(2, -tEff / td));
+    }
+    function recalcGrowth() {
+      const n0 = toRaw(parseNum(document.getElementById('grN0Input').value), grUnits.N0);
+      const k = toRaw(parseNum(document.getElementById('grKInput').value), grUnits.K);
+      const td = Math.max(1, parseNum(document.getElementById('grTdInput').value) || 24);
+      const lag = Math.max(0, parseNum(document.getElementById('grLagInput').value) || 0);
+      const hrs = Math.max(0, parseNum(document.getElementById('grHoursInput').value) || 0);
+      const targetPct = Math.min(99.5, Math.max(5, parseNum(document.getElementById('grTargetConfInput').value) || 80));
+
+      const nLog = calcLogistic(n0, k, td, lag, hrs);
+      const conf = k > 0 ? Math.min(100, (nLog / k) * 100) : 0;
+      const pdl = (n0 > 0 && nLog > n0) ? Math.log2(nLog / n0) : 0;
+      const nTarget = k * (targetPct / 100);
+      let hrsTarget = 0;
+      if (n0 > 0 && nTarget > n0 && k > nTarget) {
+        hrsTarget = lag + td * Math.log2((nTarget * (k - n0)) / (n0 * (k - nTarget)));
+      }
+
+      document.getElementById('grPredLogistic').textContent = fmt(fromRaw(nLog, grUnits.RES), grUnits.RES === 'RAW' ? 0 : 3);
+      document.getElementById('grResUnit1').textContent = grUnits.RES === 'MILLION' ? 'میلیون' : 'سلول';
+      document.getElementById('grPredConf').textContent = fmt(conf, 1);
+      document.getElementById('grHoursToTarget').textContent = fmt(hrsTarget, 1);
+      document.getElementById('grPdlVal').textContent = fmt(pdl, 2);
+
+      const hoursList = [0, 12, 24, 36, 48, 72, 96, 120];
+      const tbody = document.getElementById('growthScheduleBody');
+      tbody.innerHTML = '';
+      hoursList.forEach(h => {
+        const nl = calcLogistic(n0, k, td, lag, h);
+        const ne = n0 > 0 ? n0 * Math.pow(2, Math.max(0, h - lag) / td) : 0;
+        const c = k > 0 ? Math.min(100, (nl / k) * 100) : 0;
+        const p = (n0 > 0 && nl > n0) ? Math.log2(nl / n0) : 0;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${h}h</td><td>${fmt(fromRaw(nl, grUnits.RES), 2)}</td><td>${fmt(fromRaw(ne, grUnits.RES), 2)}</td><td>${fmt(c, 1)}%</td><td>${fmt(p, 2)}</td>`;
+        tbody.appendChild(tr);
+      });
+      drawGrowthChart(n0, k, td, lag);
+    }
+    function drawGrowthChart(n0 = 0, k = 0, td = 24, lag = 4) {
+      const canvas = document.getElementById('growthCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width, h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = document.body.classList.contains('dark') ? '#0B1727' : '#0F172A';
+      ctx.fillRect(0, 0, w, h);
+      const padL = 42, padB = 26, padT = 18, padR = 18;
+      const cw = w - padL - padR, ch = h - padT - padB;
+      ctx.strokeStyle = 'rgba(148,163,184,0.25)'; ctx.lineWidth = 1;
+      for (let i = 0; i <= 4; i++) {
+        const y = padT + (ch / 4) * i;
+        ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + cw, y); ctx.stroke();
+      }
+      if (n0 <= 0) {
+        ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText('تعداد اولیه (N₀) را وارد کنید تا نمودار رشد رسم شود', w / 2, h / 2);
+        return;
+      }
+      const maxH = 120;
+      const maxY = Math.max(k > 0 ? k * 1.05 : n0 * 16, calcLogistic(n0, k, td, lag, maxH));
+      ctx.strokeStyle = '#34D399'; ctx.lineWidth = 3;
+      ctx.beginPath();
+      for (let i = 0; i <= 60; i++) {
+        const hr = (i / 60) * maxH;
+        const val = calcLogistic(n0, k, td, lag, hr);
+        const px = padL + (hr / maxH) * cw;
+        const py = padT + ch - (val / Math.max(1, maxY)) * ch;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+    }
+    let lastEmpTd = 0;
+    function recalcEmpiricalTd() {
+      const n1 = parseNum(document.getElementById('empN1Input').value);
+      const n2 = parseNum(document.getElementById('empN2Input').value);
+      const dt = parseNum(document.getElementById('empDtInput').value);
+      lastEmpTd = (n1 > 0 && n2 > n1 && dt > 0) ? (dt * Math.LN2) / Math.log(n2 / n1) : 0;
+      document.getElementById('empTdResult').textContent = fmt(lastEmpTd, 2) + ' ساعت';
+    }
+    function applyEmpiricalTd() {
+      if (lastEmpTd > 0) {
+        document.getElementById('grTdInput').value = fmtCleanInput(lastEmpTd, 2);
+        recalcGrowth();
+      }
+    }
+    function saveGrowthToHistory() {
+      addHistoryItem('پیش‌بینی رشد سلول', `سلول پیش‌بینی‌شده=${document.getElementById('grPredLogistic').textContent} | تراکم=${document.getElementById('grPredConf').textContent}% | زمان به هدف=${document.getElementById('grHoursToTarget').textContent}h`);
+    }
+
+    // ==================== TAB 6: SEEDING & HISTORY ====================
+    let selectedSeedingVesselId = 'P6';
+    let seedVolUnit = 'mL', seedTargetUnit = 'MILLION', seedStockUnit = 'MILLION';
+    function toggleSeedUnit(w) {
+      if (w === 'VOL') {
+        const inp = document.getElementById('seedVolInput'); const ml = toMl(parseNum(inp.value), seedVolUnit);
+        seedVolUnit = seedVolUnit === 'mL' ? 'L' : 'mL'; if (inp.value) inp.value = fmtCleanInput(fromMl(ml, seedVolUnit), 5);
+        document.getElementById('seedVolUnitBtn').textContent = seedVolUnit + ' ⇄';
+      } else if (w === 'TARGET') {
+        const inp = document.getElementById('seedTargetInput'); const raw = toRaw(parseNum(inp.value), seedTargetUnit);
+        seedTargetUnit = seedTargetUnit === 'MILLION' ? 'RAW' : 'MILLION'; if (inp.value) inp.value = fmtCleanInput(fromRaw(raw, seedTargetUnit), seedTargetUnit === 'RAW' ? 0 : 4);
+        document.getElementById('seedTargetUnitBtn').textContent = (seedTargetUnit === 'MILLION' ? 'میلیون' : 'عدد کامل') + ' ⇄';
+      } else {
+        const inp = document.getElementById('seedStockInput'); const raw = toRaw(parseNum(inp.value), seedStockUnit);
+        seedStockUnit = seedStockUnit === 'MILLION' ? 'RAW' : 'MILLION'; if (inp.value) inp.value = fmtCleanInput(fromRaw(raw, seedStockUnit), seedStockUnit === 'RAW' ? 0 : 4);
+        document.getElementById('seedStockUnitBtn').textContent = (seedStockUnit === 'MILLION' ? 'میلیون' : 'عدد کامل') + ' ⇄';
+      }
+      recalcSeeding();
+    }
+    function recalcSeeding() {
+      const wells = Math.max(1, parseNum(document.getElementById('seedWellsInput').value) || 1);
+      const volMl = toMl(parseNum(document.getElementById('seedVolInput').value), seedVolUnit);
+      const targetRaw = toRaw(parseNum(document.getElementById('seedTargetInput').value), seedTargetUnit);
+      const stockRaw = toRaw(parseNum(document.getElementById('seedStockInput').value), seedStockUnit);
+      const sPct = Math.min(100, Math.max(0, parseNum(document.getElementById('seedSerumInput').value)));
+      const overfill = Math.min(100, Math.max(0, parseNum(document.getElementById('seedOverfillInput').value)));
+
+      const effWells = wells * (1 + overfill / 100);
+      const totalMix = effWells * volMl;
+      const totalCells = effWells * targetRaw;
+      const reqStock = stockRaw > 0 ? totalCells / stockRaw : 0;
+      const rem = Math.max(0, totalMix - reqStock);
+      const reqSerum = rem * (sPct / 100);
+      const reqMedia = Math.max(0, rem - reqSerum);
+
+      document.getElementById('seedReqStock').textContent = fmt(reqStock, 3);
+      document.getElementById('seedReqMedia').textContent = fmt(reqMedia, 3);
+      document.getElementById('seedReqSerum').textContent = fmt(reqSerum, 3);
+      document.getElementById('seedTotalMix').textContent = fmt(totalMix, 3);
+    }
+    function getHistory() {
+      try { return JSON.parse(localStorage.getItem('cellcount_history') || '[]'); } catch (_) { return []; }
+    }
+    function addHistoryItem(title, summary) {
+      const list = getHistory();
+      list.unshift({ title, summary, time: new Date().toLocaleString('fa-IR') });
+      try { localStorage.setItem('cellcount_history', JSON.stringify(list.slice(0, 40))); } catch (_) {}
+      renderHistory();
+      alert('در تاریخچه ذخیره شد.');
+    }
+    function clearHistory() {
+      try { localStorage.removeItem('cellcount_history'); } catch (_) {}
+      renderHistory();
+    }
+    function renderHistory() {
+      const cont = document.getElementById('historyListContainer');
+      const list = getHistory();
+      if (list.length === 0) {
+        cont.innerHTML = '<div style="font-size:0.8rem;color:var(--text-muted);text-align:center;padding:12px;">هنوز موردی در تاریخچه ذخیره نشده است.</div>';
+        return;
+      }
+      cont.innerHTML = list.map(item => `
+        <div class="tile">
+          <div style="display:flex;justify-content:space-between;font-size:0.78rem;font-weight:800;color:var(--primary);"><span>${item.title}</span><span style="color:var(--text-muted);font-weight:500;">${item.time}</span></div>
+          <div style="font-size:0.76rem;margin-top:4px;line-height:1.5;">${item.summary}</div>
+        </div>
+      `).join('');
+    }
+    function saveSeedingToHistory() {
+      addHistoryItem('پلیت‌ریزی و مسترمیکس', `استوک=${document.getElementById('seedReqStock').textContent}mL | مدیا=${document.getElementById('seedReqMedia').textContent}mL | سرم=${document.getElementById('seedReqSerum').textContent}mL`);
+    }
+
+    // ==================== BOOTSTRAP ====================
     window.addEventListener('DOMContentLoaded', () => {
-      resetSampleSlide();
+      renderGrowthAndSeedingChips();
+      refreshDilutionSummary();
+      drawSlideCanvas();
+      recalcImageCount();
+      renderMixer();
+      renderNeubauerSquares();
+      recalcGrowth();
+      recalcSeeding();
+      renderHistory();
+
       const canvas = document.getElementById('slideCanvas');
       canvas.addEventListener('click', (e) => {
         const rect = canvas.getBoundingClientRect();
-        const nx = (e.clientX - rect.left) / rect.width;
-        const ny = (e.clientY - rect.top) / rect.height;
-        const hitIdx = slideMarkers.findIndex(m => Math.hypot(m.x - nx, m.y - ny) < 0.055);
+        const nx = Math.max(0.005, Math.min(0.995, (e.clientX - rect.left) / rect.width));
+        const ny = Math.max(0.005, Math.min(0.995, (e.clientY - rect.top) / rect.height));
+        if (imgMarkerTool === 'TMPL_LIVE' || imgMarkerTool === 'TMPL_DEAD') {
+          if (!uploadedSlideImg) { alert('ابتدا یک عکس لام انتخاب کنید.'); return; }
+          runWebTemplateMatch(nx, ny, imgMarkerTool === 'TMPL_LIVE');
+          return;
+        }
+        const hitIdx = slideMarkers.findIndex(m => Math.hypot(m.x - nx, m.y - ny) < 0.032);
         if (imgMarkerTool === 'ERASE') {
-          if (hitIdx >= 0) slideMarkers.splice(hitIdx, 1);
+          if (hitIdx >= 0) {
+            const rem = slideMarkers.splice(hitIdx, 1)[0];
+            allSlideMarkers = allSlideMarkers.filter(m => m !== rem);
+          }
         } else {
           const isLive = imgMarkerTool === 'LIVE';
           if (hitIdx >= 0) {
-            if (slideMarkers[hitIdx].live === isLive) slideMarkers.splice(hitIdx, 1);
-            else slideMarkers[hitIdx].live = isLive;
+            if (slideMarkers[hitIdx].live === isLive) {
+              const rem = slideMarkers.splice(hitIdx, 1)[0];
+              allSlideMarkers = allSlideMarkers.filter(m => m !== rem);
+            } else {
+              slideMarkers[hitIdx].live = isLive;
+              slideMarkers[hitIdx].conf = 100;
+            }
           } else {
-            slideMarkers.push({ x: nx, y: ny, live: isLive });
+            const item = { x: nx, y: ny, live: isLive, conf: 100 };
+            slideMarkers.push(item);
+            allSlideMarkers.push(item);
           }
         }
         drawSlideCanvas();
         recalcImageCount();
       });
+
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      }
     });
   </script>
 </body>
